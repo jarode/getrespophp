@@ -1,1 +1,35 @@
-d
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <title>GetResponse Sync</title>
+  <script src="https://api.bitrix24.com/api/v1/"></script>
+</head>
+<body>
+  <h2>GetResponse integracja z Bitrix24</h2>
+  <p>Za pomocą tej aplikacji webhooki CRM będą przesyłane do GetResponse.</p>
+  <script>
+    BX24.init(function () {
+      BX24.callMethod('user.current', {}, function(result) {
+        if (!result.error()) {
+          const user = result.data();
+          document.body.innerHTML += `<p>Zalogowany jako: ${user.NAME} ${user.LAST_NAME}</p>`;
+        }
+      });
+
+      const hooks = [
+        ['ONCRMLEADADD', 'https://getresponsebitrixapp.azurewebsites.net/api/onLeadAdd'],
+        ['ONCRMLEADUPDATE', 'https://getresponsebitrixapp.azurewebsites.net/api/onLeadUpdate'],
+        ['ONCRMDEALADD', 'https://getresponsebitrixapp.azurewebsites.net/api/onDealAdd'],
+        ['ONCRMDEALUPDATE', 'https://getresponsebitrixapp.azurewebsites.net/api/onDealUpdate']
+      ];
+
+      hooks.forEach(([event, handler]) => {
+        BX24.callMethod('event.bind', { event, handler }, (res) => {
+          console.log(`${event}:`, res.error() || 'OK');
+        });
+      });
+    });
+  </script>
+</body>
+</html>
