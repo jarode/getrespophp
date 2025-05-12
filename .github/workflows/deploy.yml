@@ -1,16 +1,16 @@
-name: Build and Push to ACR
+name: Build and Deploy PHP App to Azure Container App
 
 on:
   push:
     branches:
       - main
-  workflow_dispatch:   # ← pozwala uruchomić ręcznie z GitHub GUI
+  workflow_dispatch:
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v3
 
       - name: Log in to Azure Container Registry
@@ -24,3 +24,17 @@ jobs:
         run: |
           docker build . -t bitrixregistry.azurecr.io/bitrix-php:latest
           docker push bitrixregistry.azurecr.io/bitrix-php:latest
+
+      - name: Azure CLI Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Update Azure Container App
+        run: |
+          az containerapp update \
+            --name bitrix-php-app \
+            --resource-group BitrixGroup \
+            --image bitrixregistry.azurecr.io/bitrix-php:latest
