@@ -1,0 +1,48 @@
+name: Trigger auto deployment for bitrix-php-app
+
+# When this action will be executed
+on:
+  # Automatically trigger it when detected changes in repo
+  push:
+    branches: 
+      [ main ]
+    paths:
+    - '**'
+    - '.github/workflows/bitrix-php-app-AutoDeployTrigger-52554789-bf02-4bae-8d57-a9b8b35498af.yml'
+
+  # Allow manual trigger 
+  workflow_dispatch:      
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions: 
+      id-token: write #This is required for requesting the OIDC JWT Token
+      contents: read #Required when GH token is used to authenticate with private repo
+
+    steps:
+      - name: Checkout to the branch
+        uses: actions/checkout@v2
+
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          client-id: ${{ secrets.BITRIXPHPAPP_AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.BITRIXPHPAPP_AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.BITRIXPHPAPP_AZURE_SUBSCRIPTION_ID }}
+
+      - name: Build and push container image to registry
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          appSourcePath: ${{ github.workspace }}
+          _dockerfilePathKey_: _dockerfilePath_
+          registryUrl: bitrixregistry.azurecr.io
+          registryUsername: ${{ secrets.BITRIXPHPAPP_REGISTRY_USERNAME }}
+          registryPassword: ${{ secrets.BITRIXPHPAPP_REGISTRY_PASSWORD }}
+          containerAppName: bitrix-php-app
+          resourceGroup: BitrixGroup
+          imageToBuild: bitrixregistry.azurecr.io/bitrix-php-app:${{ github.sha }}
+          _buildArgumentsKey_: |
+            _buildArgumentsValues_
+
+
