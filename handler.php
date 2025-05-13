@@ -18,44 +18,6 @@ $event = $data['event'] ?? null;
 $fields = $data['data']['FIELDS'] ?? [];
 
 
-// 📌 Obsługa kontaktów: aktualizacja wielkości liter
-if (in_array($event, ['ONCRMCONTACTUPDATE', 'ONCRMCONTACTADD'])) {
-
-    $contactId = $fields['ID'] ?? null;
-    $get_result = CRest::call('crm.contact.get', ['ID' => $contactId]);
-
-    $name        = mb_convert_case($get_result['result']['NAME'], MB_CASE_TITLE, "UTF-8");
-    $last_name   = mb_convert_case($get_result['result']['LAST_NAME'], MB_CASE_TITLE, "UTF-8");
-    $middle_name = mb_convert_case($get_result['result']['SECOND_NAME'], MB_CASE_TITLE, "UTF-8");
-
-    if (
-        ($get_result['result']['NAME'] != $name) ||
-        ($get_result['result']['LAST_NAME'] != $last_name) ||
-        ($get_result['result']['SECOND_NAME'] != $middle_name)
-    ) {
-        $update_result = CRest::call('crm.contact.update', [
-            'ID' => $contactId,
-            'FIELDS' => [
-                'NAME'        => $name,
-                'LAST_NAME'   => $last_name,
-                'SECOND_NAME' => $middle_name
-            ]
-        ]);
-    }
-
-    file_put_contents(
-        $dir . time() . '_' . rand(1, 9999) . '_contact.txt',
-        var_export([
-            'get'     => $get_result,
-            'update'  => $update_result ?? [],
-            'names'   => [$name, $last_name, $middle_name],
-            'event'   => $event,
-            'raw'     => $data
-        ], true)
-    );
-}
-
-
 // 📌 Obsługa leadów → wysyłka do GetResponse
 if ($event === 'ONCRMLEADADD') {
 
