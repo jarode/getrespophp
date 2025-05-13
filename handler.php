@@ -1,4 +1,6 @@
 <?php
+
+file_put_contents(__DIR__ . '/tmp/_raw.txt', var_export($_REQUEST, true), FILE_APPEND);
 include_once('crest.php');
 
 // 📁 Katalog na logi
