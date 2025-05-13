@@ -4,11 +4,13 @@ require_once (__DIR__.'/crest.php');
 $install_result = CRest::installApp();
 
 // embedded for placement "placement.php"
-$handlerBackUrl = ($_SERVER['HTTPS'] === 'on' || $_SERVER['SERVER_PORT'] === '443' ? 'https' : 'http') . '://'
+$handlerBackUrl2 = ($_SERVER['HTTPS'] === 'on' || $_SERVER['SERVER_PORT'] === '443' ? 'https' : 'http') . '://'
 	. $_SERVER['SERVER_NAME']
 	. (in_array($_SERVER['SERVER_PORT'],	['80', '443'], true) ? '' : ':' . $_SERVER['SERVER_PORT'])
 	. str_replace($_SERVER['DOCUMENT_ROOT'], '',__DIR__)
 	. '/handler.php';
+
+$handlerBackUrl = 'https://bitrix-php-app.nicetree-ab137c51.westeurope.azurecontainerapps.io/handler.php?v=2';
 
 $result = CRest::call(
 	'event.bind',
