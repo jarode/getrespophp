@@ -19,7 +19,7 @@ $result = CRest::call(
 	]
 );
 
-CRest::setLog(['update' => $result], 'installation');
+CRest::setLog(['contact_update' => $result], 'installation');
 
 $result = CRest::call(
 	'event.bind',
@@ -30,7 +30,18 @@ $result = CRest::call(
 	]
 );
 
-CRest::setLog(['add' => $result], 'installation');
+CRest::setLog(['contact_add' => $result], 'installation');
+
+$result = CRest::call(
+	'event.bind',
+	[
+		'EVENT' => 'ONCRMLEADADD',
+		'HANDLER' => $handlerBackUrl,
+        'EVENT_TYPE' => 'online'
+	]
+);
+
+CRest::setLog(['lead_add' => $result], 'installation');
 
 if($install_result['rest_only'] === false):?>
 <head>
