@@ -1,6 +1,5 @@
 <?php
 
-file_put_contents(__DIR__ . '/tmp/_raw.txt', var_export($_REQUEST, true), FILE_APPEND);
 include_once('crest.php');
 
 // 📁 Katalog na logi
@@ -9,10 +8,20 @@ if (!file_exists($dir)) {
     mkdir($dir, 0777, true);
 }
 
-// 📌 Obsługa kontaktów: aktualizacja wielkości liter
-if (in_array($_REQUEST['event'], ['ONCRMCONTACTUPDATE', 'ONCRMCONTACTADD'])) {
+// 📥 Wczytanie danych JSON z Bitrix webhooka
+$json = file_get_contents('php://input');
+file_put_contents($dir . '_raw.json', $json . "\n", FILE_APPEND);
+$data = json_decode($json, true);
 
-    $contactId = $_REQUEST['data']['FIELDS']['ID'] ?? null;
+// 🔎 Sprawdź jaki event został uruchomiony
+$event = $data['event'] ?? null;
+$fields = $data['data']['FIELDS'] ?? [];
+
+
+// 📌 Obsługa kontaktów: aktualizacja wielkości liter
+if (in_array($event, ['ONCRMCONTACTUPDATE', 'ONCRMCONTACTADD'])) {
+
+    $contactId = $fields['ID'] ?? null;
     $get_result = CRest::call('crm.contact.get', ['ID' => $contactId]);
 
     $name        = mb_convert_case($get_result['result']['NAME'], MB_CASE_TITLE, "UTF-8");
@@ -40,15 +49,17 @@ if (in_array($_REQUEST['event'], ['ONCRMCONTACTUPDATE', 'ONCRMCONTACTADD'])) {
             'get'     => $get_result,
             'update'  => $update_result ?? [],
             'names'   => [$name, $last_name, $middle_name],
-            'request' => $_REQUEST
+            'event'   => $event,
+            'raw'     => $data
         ], true)
     );
 }
 
-// 📌 Obsługa leadów → wysyłka do GetResponse
-if ($_REQUEST['event'] === 'ONCRMLEADADD') {
 
-    $leadId = $_REQUEST['data']['FIELDS']['ID'] ?? null;
+// 📌 Obsługa leadów → wysyłka do GetResponse
+if ($event === 'ONCRMLEADADD') {
+
+    $leadId = $fields['ID'] ?? null;
     $lead_result = CRest::call('crm.lead.get', ['ID' => $leadId]);
 
     $lead = $lead_result['result'] ?? [];
@@ -88,9 +99,8 @@ if ($_REQUEST['event'] === 'ONCRMLEADADD') {
                 'email'    => $email,
                 'response' => $response,
                 'http'     => $httpCode,
-                'raw'      => $_REQUEST
+                'raw'      => $data
             ], true)
         );
     }
 }
-?>
