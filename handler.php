@@ -8,15 +8,12 @@ if (!file_exists($dir)) {
     mkdir($dir, 0777, true);
 }
 
-// 📥 Wczytanie danych JSON z Bitrix webhooka
-$json = file_get_contents('php://input');
-file_put_contents($dir . '_raw.json', $json . "\n", FILE_APPEND);
-$data = json_decode($json, true);
+// 🔎 Loguj dane wejściowe (dla pewności)
+file_put_contents($dir . '_raw.txt', var_export($_POST, true), FILE_APPEND);
 
-// 🔎 Sprawdź jaki event został uruchomiony
-$event = $data['event'] ?? null;
-$fields = $data['data']['FIELDS'] ?? [];
-
+// Pobierz dane z POST
+$event = $_POST['event'] ?? null;
+$fields = $_POST['data']['FIELDS'] ?? [];
 
 // 📌 Obsługa leadów → wysyłka do GetResponse
 if ($event === 'ONCRMLEADADD') {
@@ -29,10 +26,9 @@ if ($event === 'ONCRMLEADADD') {
     $name  = $lead['NAME'] ?? '';
     $email = $lead['EMAIL'][0]['VALUE'] ?? '';
 
-    // ✅ Wyślij do GetResponse
     if ($email) {
-        $apiKey = '62a96f1wzus8pp7s6o83s233j2to908k'; // ← Twój klucz
-        $campaignId = 'id0Rg';                        // ← Twoja kampania
+        $apiKey = '62a96f1wzus8pp7s6o83s233j2to908k';
+        $campaignId = 'id0Rg';
 
         $payload = json_encode([
             'name' => $name,
@@ -61,7 +57,7 @@ if ($event === 'ONCRMLEADADD') {
                 'email'    => $email,
                 'response' => $response,
                 'http'     => $httpCode,
-                'raw'      => $data
+                'raw'      => $_POST
             ], true)
         );
     }
