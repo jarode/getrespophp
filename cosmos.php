@@ -51,4 +51,77 @@ function build_auth_token($verb, $resourceType, $resourceLink, $utcDate, $key, $
 
     return urlencode("type={$keyType}&ver={$tokenVersion}&sig={$signature}");
 }
+
+function cosmos_get_by_domain($domain) {
+    $endpoint = 'https://bitrixusersdb.documents.azure.com:443/';
+    $key = getenv('COSMOS_PRIMARY_KEY'); // Zmienna środowiskowa lub wpisz na sztywno
+    $databaseId = 'bitrixapp';
+    $containerId = 'users';
+    $resourceLink = "dbs/{$databaseId}/colls/{$containerId}";
+    $url = $endpoint . $resourceLink . '/docs';
+
+    $query = [
+        'query' => 'SELECT * FROM c WHERE c.domain = @domain',
+        'parameters' => [
+            ['name' => '@domain', 'value' => $domain]
+        ]
+    ];
+
+    $headers = [
+        'Content-Type: application/query+json',
+        'x-ms-date: ' . gmdate('D, d M Y H:i:s T'),
+        'x-ms-version: 2018-12-31',
+        'x-ms-documentdb-isquery' => 'true',
+        'x-ms-documentdb-query-enablecrosspartition' => 'true',
+        'Authorization: ' . build_auth_token('POST', 'docs', $resourceLink, gmdate('D, d M Y H:i:s T'), $key)
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($query));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    $result = json_decode($response, true);
+    return $result['Documents'][0] ?? [];
+}
+
+function cosmos_update($domain, $fields) {
+    $existing = cosmos_get_by_domain($domain);
+    if (!$existing) return false;
+
+    $id = $existing['id'];
+    $docLink = "dbs/bitrixapp/colls/users/docs/{$id}";
+    $endpoint = 'https://bitrixusersdb.documents.azure.com:443/';
+    $url = $endpoint . $docLink;
+    $key = getenv('COSMOS_PRIMARY_KEY');
+
+    $headers = [
+        'Content-Type: application/json',
+        'x-ms-date: ' . gmdate('D, d M Y H:i:s T'),
+        'x-ms-version: 2018-12-31',
+        'x-ms-documentdb-partitionkey' => '["' . $domain . '"]',
+        'Authorization: ' . build_auth_token('PUT', 'docs', $docLink, gmdate('D, d M Y H:i:s T'), $key)
+    ];
+
+    $merged = array_merge($existing, $fields);
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($merged));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    file_put_contents(__DIR__ . '/logs/cosmos_update_' . time() . '.json', json_encode([
+        'updated' => $merged,
+        'response' => $response
+    ], JSON_PRETTY_PRINT));
+
+    return true;
+}
+
 ?>
