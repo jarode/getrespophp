@@ -1,5 +1,6 @@
 <?php
 require_once (__DIR__.'/crest.php');
+require_once __DIR__ . '/cosmos.php';
 
 $install_result = CRest::installApp();
 
@@ -22,6 +23,18 @@ $result = CRest::call(
 );
 
 CRest::setLog(['lead_add' => $result], 'installation');
+
+// ➕ Zapisz dane instalacyjne do bazy Cosmos DB (jeśli instalacja OK)
+if ($install_result['install'] === true) {
+    cosmos_insert([
+        'portal' => $install_result['member_id'],
+        'domain' => $install_result['domain'],
+        'auth' => $install_result['auth'],
+        'date' => date('c'),
+        'plan' => 'trial',
+        'status' => 'active'
+    ]);
+}
 
 if($install_result['rest_only'] === false):?>
 <head>
