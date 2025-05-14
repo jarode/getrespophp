@@ -1,26 +1,25 @@
 <?php
+<?php
 function cosmos_add_user($userData) {
-    $endpoint = 'https://bitrixusersdb.documents.azure.com:443/';
-    $key = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw=='; // PRIMARY KEY
+    $endpoint = 'https://bitrixsubscriptionsdb.documents.azure.com:443/';
+    $key = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw==';
     $databaseId = 'bitrixapp';
-    $containerId = 'users';
+    $containerId = 'subscriptions';
     $resourceLink = "dbs/{$databaseId}/colls/{$containerId}";
     $url = $endpoint . $resourceLink . '/docs';
 
-    $verb = 'POST';
-    $resourceType = 'docs';
     $utcDate = gmdate('D, d M Y H:i:s T');
-    $token = build_auth_token($verb, $resourceType, $resourceLink, $utcDate, $key);
+    $token = build_auth_token('POST', 'docs', $resourceLink, $utcDate, $key);
 
     $headers = [
         'Content-Type: application/json',
         'Accept: application/json',
         'x-ms-date: ' . $utcDate,
-        'x-ms-version: 2018-12-31',
+        'x-ms-version: ' . '2023-11-15',
         'Authorization: ' . $token
     ];
 
-    $userData['id'] = uniqid(); // Cosmos DB requires a unique 'id' for each document
+    $userData['id'] = uniqid();
 
     $ch = curl_init();
     curl_setopt($ch, CURLOPT_URL, $url);
@@ -52,11 +51,14 @@ function build_auth_token($verb, $resourceType, $resourceLink, $utcDate, $key, $
     return urlencode("type={$keyType}&ver={$tokenVersion}&sig={$signature}");
 }
 
+// analogicznie zaktualizuj w pozostałych funkcjach: cosmos_get_by_domain, cosmos_update, cosmos_insert
+// zamieniając containerId z 'subscriptions' na 'subscriptions'
+
 function cosmos_get_by_domain($domain) {
-    $endpoint = 'https://bitrixusersdb.documents.azure.com:443/';
+    $endpoint = 'https://bitrixsubscriptionsdb.documents.azure.com:443/';
     $key = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw=='; // Zmienna środowiskowa lub wpisz na sztywno
     $databaseId = 'bitrixapp';
-    $containerId = 'users';
+    $containerId = 'subscriptions';
     $resourceLink = "dbs/{$databaseId}/colls/{$containerId}";
     $url = $endpoint . $resourceLink . '/docs';
 
@@ -93,8 +95,8 @@ function cosmos_update($domain, $fields) {
     if (!$existing) return false;
 
     $id = $existing['id'];
-    $docLink = "dbs/bitrixapp/colls/users/docs/{$id}";
-    $endpoint = 'https://bitrixusersdb.documents.azure.com:443/';
+    $docLink = "dbs/bitrixapp/colls/subscriptions/docs/{$id}";
+    $endpoint = 'https://bitrixsubscriptionsdb.documents.azure.com:443/';
     $url = $endpoint . $docLink;
     $key = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw==';
 
@@ -125,10 +127,10 @@ function cosmos_update($domain, $fields) {
 }
 
 function cosmos_insert($data) {
-    $endpoint = 'https://bitrixusersdb.documents.azure.com:443/';
+    $endpoint = 'https://bitrixsubscriptionsdb.documents.azure.com:443/';
     $key = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw==';
     $databaseId = 'bitrixapp';
-    $containerId = 'users';
+    $containerId = 'subscriptions';
     $resourceLink = "dbs/{$databaseId}/colls/{$containerId}";
     $url = $endpoint . $resourceLink . '/docs';
 
