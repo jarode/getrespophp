@@ -1,5 +1,4 @@
 <?php
-<?php
 function cosmos_add_user($userData) {
     $endpoint = 'https://bitrixsubscriptionsdb.documents.azure.com:443/';
     $key = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw==';
@@ -72,7 +71,7 @@ function cosmos_get_by_domain($domain) {
     $headers = [
         'Content-Type: application/query+json',
         'x-ms-date: ' . gmdate('D, d M Y H:i:s T'),
-        'x-ms-version: 2018-12-31',
+        'x-ms-version: 2023-11-15',
         'x-ms-documentdb-isquery' => 'true',
         'x-ms-documentdb-query-enablecrosspartition' => 'true',
         'Authorization: ' . build_auth_token('POST', 'docs', $resourceLink, gmdate('D, d M Y H:i:s T'), $key)
@@ -103,7 +102,7 @@ function cosmos_update($domain, $fields) {
     $headers = [
         'Content-Type: application/json',
         'x-ms-date: ' . gmdate('D, d M Y H:i:s T'),
-        'x-ms-version: 2018-12-31',
+        'x-ms-version: 2023-11-15',
         'x-ms-documentdb-partitionkey' => '["' . $domain . '"]',
         'Authorization: ' . build_auth_token('PUT', 'docs', $docLink, gmdate('D, d M Y H:i:s T'), $key)
     ];
@@ -137,7 +136,7 @@ function cosmos_insert($data) {
     $headers = [
         'Content-Type: application/json',
         'x-ms-date: ' . gmdate('D, d M Y H:i:s T'),
-        'x-ms-version' => '2018-12-31',
+        'x-ms-version' => '2023-11-15',
         'x-ms-documentdb-is-upsert' => 'true',
         'x-ms-documentdb-partitionkey' => '["' . $data['domain'] . '"]',
         'Authorization: ' . build_auth_token('POST', 'docs', $resourceLink, gmdate('D, d M Y H:i:s T'), $key)
