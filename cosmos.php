@@ -124,4 +124,35 @@ function cosmos_update($domain, $fields) {
     return true;
 }
 
+function cosmos_insert($data) {
+    $endpoint = 'https://bitrixusersdb.documents.azure.com:443/';
+    $key = getenv('COSMOS_PRIMARY_KEY');
+    $databaseId = 'bitrixapp';
+    $containerId = 'users';
+    $resourceLink = "dbs/{$databaseId}/colls/{$containerId}";
+    $url = $endpoint . $resourceLink . '/docs';
+
+    $headers = [
+        'Content-Type: application/json',
+        'x-ms-date: ' . gmdate('D, d M Y H:i:s T'),
+        'x-ms-version' => '2018-12-31',
+        'x-ms-documentdb-is-upsert' => 'true',
+        'x-ms-documentdb-partitionkey' => '["' . $data['domain'] . '"]',
+        'Authorization: ' . build_auth_token('POST', 'docs', $resourceLink, gmdate('D, d M Y H:i:s T'), $key)
+    ];
+
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    $response = curl_exec($ch);
+    curl_close($ch);
+
+    file_put_contents(__DIR__ . '/logs/cosmos_insert_' . time() . '.json', json_encode([
+        'inserted' => $data,
+        'response' => $response
+    ], JSON_PRETTY_PRINT));
+}
+
 ?>
