@@ -1,7 +1,7 @@
 <?php
 function cosmos_add_user($userData) {
     $endpoint = 'https://bitrixusersdb.documents.azure.com:443/';
-    $key = getenv('COSMOS_PRIMARY_KEY'); // PRIMARY KEY
+    $key = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw=='; // PRIMARY KEY
     $databaseId = 'bitrixapp';
     $containerId = 'users';
     $resourceLink = "dbs/{$databaseId}/colls/{$containerId}";
@@ -54,7 +54,7 @@ function build_auth_token($verb, $resourceType, $resourceLink, $utcDate, $key, $
 
 function cosmos_get_by_domain($domain) {
     $endpoint = 'https://bitrixusersdb.documents.azure.com:443/';
-    $key = getenv('COSMOS_PRIMARY_KEY'); // Zmienna środowiskowa lub wpisz na sztywno
+    $key = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw=='; // Zmienna środowiskowa lub wpisz na sztywno
     $databaseId = 'bitrixapp';
     $containerId = 'users';
     $resourceLink = "dbs/{$databaseId}/colls/{$containerId}";
@@ -96,7 +96,7 @@ function cosmos_update($domain, $fields) {
     $docLink = "dbs/bitrixapp/colls/users/docs/{$id}";
     $endpoint = 'https://bitrixusersdb.documents.azure.com:443/';
     $url = $endpoint . $docLink;
-    $key = getenv('COSMOS_PRIMARY_KEY');
+    $key = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw==';
 
     $headers = [
         'Content-Type: application/json',
@@ -126,7 +126,7 @@ function cosmos_update($domain, $fields) {
 
 function cosmos_insert($data) {
     $endpoint = 'https://bitrixusersdb.documents.azure.com:443/';
-    $key = getenv('COSMOS_PRIMARY_KEY');
+    $key = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw==';
     $databaseId = 'bitrixapp';
     $containerId = 'users';
     $resourceLink = "dbs/{$databaseId}/colls/{$containerId}";
