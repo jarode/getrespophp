@@ -16,7 +16,7 @@ function cosmos_add_user($userData) {
         'Content-Type: application/json',
         'Accept: application/json',
         'x-ms-date: ' . $utcDate,
-        'x-ms-version: 2023-11-15',
+        'x-ms-version: 2018-12-31',
         'Authorization: ' . $token
     ];
 
@@ -70,7 +70,7 @@ function cosmos_get_by_domain($domain) {
     $headers = [
         'Content-Type: application/query+json',
         'x-ms-date: ' . gmdate('D, d M Y H:i:s T'),
-        'x-ms-version: 2023-11-15',
+        'x-ms-version: 2018-12-31',
         'x-ms-documentdb-isquery' => 'true',
         'x-ms-documentdb-query-enablecrosspartition' => 'true',
         'Authorization: ' . build_auth_token('POST', 'docs', $resourceLink, gmdate('D, d M Y H:i:s T'), $key)
@@ -101,7 +101,7 @@ function cosmos_update($domain, $fields) {
     $headers = [
         'Content-Type: application/json',
         'x-ms-date: ' . gmdate('D, d M Y H:i:s T'),
-        'x-ms-version: 2023-11-15',
+        'x-ms-version: 2018-12-31',
         'x-ms-documentdb-partitionkey' => '["' . $domain . '"]',
         'Authorization: ' . build_auth_token('PUT', 'docs', $docLink, gmdate('D, d M Y H:i:s T'), $key)
     ];
@@ -135,7 +135,7 @@ function cosmos_insert($data) {
     $headers = [
         'Content-Type: application/json',
         'x-ms-date: ' . gmdate('D, d M Y H:i:s T'),
-        'x-ms-version' => '2023-11-15',
+        'x-ms-version' => '2018-12-31',
         'x-ms-documentdb-is-upsert' => 'true',
         'x-ms-documentdb-partitionkey' => '["' . $data['domain'] . '"]',
         'Authorization: ' . build_auth_token('POST', 'docs', $resourceLink, gmdate('D, d M Y H:i:s T'), $key)
