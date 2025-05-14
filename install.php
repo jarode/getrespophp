@@ -26,10 +26,13 @@ CRest::setLog(['lead_add' => $result], 'installation');
 
 // ➕ Zapisz dane instalacyjne do bazy Cosmos DB (jeśli instalacja OK)
 if ($install_result['install'] === true) {
+    $request = $_REQUEST;
+    $auth = CRest::getAppSettings(); // zawiera access_token i inne
+
     cosmos_insert([
-        'portal' => $install_result['member_id'],
-        'domain' => $install_result['domain'],
-        'auth' => $install_result['auth'],
+        'portal' => $request['member_id'] ?? null,
+        'domain' => $request['DOMAIN'] ?? null,
+        'auth' => $auth['access_token'] ?? null,
         'date' => date('c'),
         'plan' => 'trial',
         'status' => 'active'
@@ -55,3 +58,8 @@ if($install_result['rest_only'] === false):?>
 	<?endif;?>
 </body>
 <?endif;
+
+file_put_contents(__DIR__ . '/logs/install_debug_' . time() . '.json', json_encode([
+    'request' => $request,
+    'auth' => $auth
+], JSON_PRETTY_PRINT));
