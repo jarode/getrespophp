@@ -427,23 +427,30 @@ class CRest
 	 *
 	 * @return array setting for getAppSettings()
 	 */
-
 	protected static function getSettingData()
 	{
-		$return = [];
-		if(file_exists(__DIR__ . '/settings.json'))
-		{
-			$return = static::expandData(file_get_contents(__DIR__ . '/settings.json'));
-			if(defined("C_REST_CLIENT_ID") && !empty(C_REST_CLIENT_ID))
-			{
-				$return['C_REST_CLIENT_ID'] = C_REST_CLIENT_ID;
-			}
-			if(defined("C_REST_CLIENT_SECRET") && !empty(C_REST_CLIENT_SECRET))
-			{
-				$return['C_REST_CLIENT_SECRET'] = C_REST_CLIENT_SECRET;
+		// Odczyt z CosmosDB po domenie
+		$domain = null;
+		if (isset($_REQUEST['DOMAIN'])) {
+			$domain = $_REQUEST['DOMAIN'];
+		} elseif (isset($_SERVER['HTTP_HOST'])) {
+			$domain = $_SERVER['HTTP_HOST'];
+		}
+		if ($domain) {
+			$settings = CosmosDB::getSettings($domain);
+			if (is_array($settings)) {
+				if(defined("C_REST_CLIENT_ID") && !empty(C_REST_CLIENT_ID))
+				{
+					$settings['C_REST_CLIENT_ID'] = C_REST_CLIENT_ID;
+				}
+				if(defined("C_REST_CLIENT_SECRET") && !empty(C_REST_CLIENT_SECRET))
+				{
+					$settings['C_REST_CLIENT_SECRET'] = C_REST_CLIENT_SECRET;
+				}
+				return $settings;
 			}
 		}
-		return $return;
+		return [];
 	}
 
 	/**
@@ -529,10 +536,14 @@ class CRest
 	 * @var $arSettings array settings application
 	 * @return boolean is successes save data for setSettingData()
 	 */
-
 	protected static function setSettingData($arSettings)
 	{
-		return  (boolean)file_put_contents(__DIR__ . '/settings.json', static::wrapData($arSettings));
+		$domain = $arSettings['domain'] ?? ($_REQUEST['DOMAIN'] ?? ($_SERVER['HTTP_HOST'] ?? null));
+		if ($domain) {
+			$result = CosmosDB::setSettings($domain, $arSettings);
+			return ($result && isset($result['code']) && $result['code'] >= 200 && $result['code'] < 300);
+		}
+		return false;
 	}
 
 	/**
