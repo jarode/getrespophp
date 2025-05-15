@@ -8,12 +8,11 @@ if ($domain) {
     $settings = CosmosDB::getSettings($domain) ?? [];
 }
 
-// License status logic
+// License status logic (single status)
 $status = strtolower($settings['license_status'] ?? 'active'); // trial, active, expired, pending, inactive
 $statusLabel = ucfirst($status);
 $statusBadge = $status === 'active' ? 'success' : ($status === 'trial' ? 'info' : ($status === 'pending' ? 'warning' : 'danger'));
 $expiry = $settings['license_expiry'] ?? '2025-12-31';
-$type = $settings['subscription_type'] ?? 'premium';
 $apiKey = $settings['getresponse_api_key'] ?? '************';
 $listId = $settings['getresponse_list_id'] ?? 'id0Rg';
 $connection = $settings['connection_status'] ?? 'Connected';
@@ -64,12 +63,6 @@ if ($status === 'trial' && !empty($expiry)) {
                         <label class="col-sm-4 col-form-label">Valid until:</label>
                         <div class="col-sm-8 pt-2">
                             <span><?php echo htmlspecialchars($expiry); ?></span>
-                        </div>
-                    </div>
-                    <div class="mb-3 row">
-                        <label class="col-sm-4 col-form-label">Subscription type:</label>
-                        <div class="col-sm-8 pt-2">
-                            <span><?php echo htmlspecialchars($type); ?></span>
                         </div>
                     </div>
                     <hr>
