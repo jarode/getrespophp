@@ -350,7 +350,7 @@ class CRest
 	 * @return boolean
 	 */
 
-	private static function setAppSettings($arSettings, $isInstall = false)
+	private static function setAppSettings2($arSettings, $isInstall = false)
 	{
 		$return = false;
 		if(is_array($arSettings))
@@ -364,6 +364,158 @@ class CRest
 		}
 		return $return;
 	}
+
+	private static function setAppSettings($arSettings, $isInstall = false)
+	{
+	    $return = false;
+	
+	    if (is_array($arSettings)) {
+	        $oldData = static::getAppSettings();
+	        if ($isInstall !== true && !empty($oldData) && is_array($oldData)) {
+	            $arSettings = array_merge($oldData, $arSettings);
+	        }
+	
+	        // ⏺️ 1. Zapis lokalny (plik settings.json)
+	        $return = static::setSettingData($arSettings);
+	
+	        // ✅ 2. Równoległy zapis do Cosmos DB
+	        try {
+	            $domain = $arSettings['domain'] ?? $_REQUEST['DOMAIN'] ?? null;
+	            if ($domain) {
+	                $cosmosData = [
+	                    'domain' => $domain,
+	                    'member_id' => $arSettings['member_id'] ?? ($_REQUEST['member_id'] ?? null),
+	                    'access_token' => $arSettings['access_token'] ?? null,
+	                    'refresh_token' => $arSettings['refresh_token'] ?? null,
+	                    'client_endpoint' => $arSettings['client_endpoint'] ?? null,
+	                    'application_token' => $arSettings['application_token'] ?? null,
+	                    'app_installed' => $isInstall ? date('c') : null,
+	                    'source' => 'setAppSettings'
+	                ];
+	
+	                // Usuń null-e i puste wartości
+	                $cosmosData = array_filter($cosmosData, fn($v) => $v !== null && $v !== '');
+	
+	                cosmos_update($domain, $cosmosData);
+	            }
+	        } catch (Exception $e) {
+	            // 🔧 fallback do logu plikowego, by nie blokować instalacji
+	            static::setLog([
+	                'error' => 'cosmos_db_write_failed',
+	                'message' => $e->getMessage(),
+	                'stack' => $e->getTraceAsString(),
+	                'data' => $arSettings
+	            ], 'cosmos_fallback');
+	        }
+	    }
+	
+	    return $return;
+	}
+
+	function cosmos_update(string $domain, array $fields): bool
+	{
+	    if (!$domain) {
+	        throw new Exception("Domain is required for Cosmos update.");
+	    }
+	
+	    $existing = cosmos_get_by_domain($domain);
+	    $id = $existing['id'] ?? $domain;
+	
+	    $docLink = "dbs/bitrixapp/colls/subscriptions/docs/{$id}";
+	    $endpoint = getenv('COSMOS_DB_ENDPOINT') ?: 'https://bitrixsubscriptionsdb.documents.azure.com:443/';
+	    $key = getenv('COSMOS_PRIMARY_KEY') ?: 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw==';
+	
+	    $timestamp = gmdate('D, d M Y H:i:s T');
+	    $authToken = build_auth_token('PUT', 'docs', $docLink, $timestamp, $key);
+	
+	    $headers = [
+	        'Content-Type: application/json',
+	        'x-ms-date: ' . $timestamp,
+	        'x-ms-version: ' . '2023-11-15',
+	        'x-ms-documentdb-partitionkey' => '["' . $domain . '"]',
+	        'x-ms-documentdb-is-upsert: true',
+	        'Authorization: ' . $authToken
+	    ];
+	
+	    // Merging previous + current fields
+	    $merged = array_merge($existing ?? [], $fields);
+	    $merged['id'] = $id;
+	    $merged['domain'] = $domain;
+	    $merged['updated_at'] = date('c');
+	
+	    $url = $endpoint . $docLink;
+	
+	    $ch = curl_init($url);
+	    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+	    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+	    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($merged));
+	    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+	    $response = curl_exec($ch);
+	    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+	    curl_close($ch);
+	
+	    // Log do pliku (opcjonalnie — można zastąpić cosmos_log())
+	    file_put_contents(__DIR__ . '/logs/cosmos_update_' . time() . '.json', json_encode([
+	        'domain' => $domain,
+	        'payload' => $merged,
+	        'response' => $response,
+	        'status' => $httpCode
+	    ], JSON_PRETTY_PRINT));
+	
+	    return $httpCode >= 200 && $httpCode < 300;
+	}
+
+	function cosmos_get_by_domain($domain)
+	{
+	    $endpoint = getenv('COSMOS_DB_ENDPOINT') ?: 'https://bitrixsubscriptionsdb.documents.azure.com:443/';
+	    $key = getenv('COSMOS_PRIMARY_KEY') ?: 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw==';
+	    $db = 'bitrixapp';
+	    $container = 'subscriptions';
+	
+	    $url = $endpoint . "dbs/$db/colls/$container/docs";
+	    $queryUrl = $endpoint . "dbs/$db/colls/$container/docs";
+	
+	    $headers = [
+	        'Content-Type: application/query+json',
+	        'x-ms-date: ' . gmdate('D, d M Y H:i:s T'),
+	        'x-ms-version: 2023-11-15',
+	        'x-ms-documentdb-isquery' => 'true',
+	        'x-ms-documentdb-query-enablecrosspartition' => 'true',
+	        'Authorization: ' . build_auth_token('POST', 'docs', "dbs/$db/colls/$container/docs", gmdate('D, d M Y H:i:s T'), $key)
+	    ];
+	
+	    $query = [
+	        'query' => 'SELECT * FROM c WHERE c.domain = @domain',
+	        'parameters' => [['name' => '@domain', 'value' => $domain]]
+	    ];
+	
+	    $ch = curl_init($queryUrl);
+	    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+	    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+	    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($query));
+	    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+	    $response = curl_exec($ch);
+	    curl_close($ch);
+	
+	    $result = json_decode($response, true);
+	    return $result['Documents'][0] ?? null;
+	}
+
+	function build_auth_token($method, $resourceType, $resourceLink, $date, $key)
+	{
+	    $key = base64_decode($key);
+	    $stringToSign = strtolower($method) . "\n" .
+	                    strtolower($resourceType) . "\n" .
+	                    $resourceLink . "\n" .
+	                    strtolower($date) . "\n" .
+	                    "\n";
+	
+	    $signature = base64_encode(hash_hmac('sha256', $stringToSign, $key, true));
+	
+	    return urlencode("type=master&ver=1.0&sig=" . $signature);
+	}
+
+
 
 	/**
 	 * @return mixed setting application for query
