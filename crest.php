@@ -2,6 +2,18 @@
 require_once (__DIR__.'/settings.php');
 require_once (__DIR__.'/cosmos.php');
 
+function build_auth_token($verb, $resourceType, $resourceLink, $utcDate, $key, $keyType = 'master', $tokenVersion = '1.0') {
+    $stringToSign = strtolower($verb) . "\n" .
+                    strtolower($resourceType) . "\n" .
+                    $resourceLink . "\n" .
+                    strtolower($utcDate) . "\n\n";
+
+    $decodedKey = base64_decode($key);
+    $signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
+
+    return urlencode("type={$keyType}&ver={$tokenVersion}&sig={$signature}");
+}
+
 /**
  *  @version 1.36
  *  define:
@@ -588,21 +600,7 @@ class CRest
 	{
 		if(!defined("C_REST_BLOCK_LOG") || C_REST_BLOCK_LOG !== true)
 		{
-			$logData = [
-				'domain' => $_REQUEST['DOMAIN'] ?? 'unknown',
-				'type' => $type ?: 'general',
-				'data' => $arData,
-				'status' => isset($arData['error']) ? 'error' : 'success',
-				'metadata' => [
-					'source' => 'bitrix24',
-					'action' => $type
-				]
-			];
-
-			// Zapisz log do Cosmos DB
-			cosmos_add_log($logData);
-
-			// Zachowaj kompatybilność wsteczną - zapisz też do pliku
+			// Oryginalne logowanie do pliku
 			if(defined("C_REST_LOGS_DIR"))
 			{
 				$path = C_REST_LOGS_DIR;
@@ -631,6 +629,87 @@ class CRest
 				}
 
 				file_put_contents($path, $jsonLog);
+			}
+
+			// Dodatkowe logowanie do Cosmos DB
+			try {
+				$logData = [
+					'domain' => $_REQUEST['DOMAIN'] ?? 'unknown',
+					'type' => $type ?: 'general',
+					'data' => $arData,
+					'status' => isset($arData['error']) ? 'error' : 'success',
+					'metadata' => [
+						'source' => 'bitrix24',
+						'action' => $type
+					]
+				];
+
+				// Funkcja do wysyłania logów do Cosmos DB
+				$endpoint = 'https://bitrixsubscriptionsdb.documents.azure.com:443/';
+				$key = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw==';
+				$databaseId = 'bitrixapp';
+				$containerId = 'logs';
+				$resourceLink = "dbs/{$databaseId}/colls/{$containerId}";
+				$url = $endpoint . $resourceLink . '/docs';
+
+				$utcDate = gmdate('D, d M Y H:i:s T');
+				$token = build_auth_token('POST', 'docs', $resourceLink, $utcDate, $key);
+
+				$logDocument = [
+					'id' => uniqid(),
+					'timestamp' => date('c'),
+					'domain' => $logData['domain'],
+					'type' => $logData['type'],
+					'data' => $logData['data'],
+					'status' => $logData['status'],
+					'metadata' => $logData['metadata']
+				];
+
+				$headers = [
+					'Content-Type: application/json',
+					'Accept: application/json',
+					'x-ms-date: ' . $utcDate,
+					'x-ms-version: ' . '2023-11-15',
+					'x-ms-documentdb-partitionkey' => '["' . $logDocument['domain'] . '"]',
+					'Authorization: ' . $token
+				];
+
+				$ch = curl_init();
+				curl_setopt($ch, CURLOPT_URL, $url);
+				curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+				curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+				curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($logDocument));
+				curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+
+				$response = curl_exec($ch);
+				$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+				curl_close($ch);
+
+				// Jeśli wystąpił błąd przy zapisie do Cosmos DB, zapisz go do pliku
+				if ($code < 200 || $code >= 300) {
+					$errorLog = [
+						'error' => 'cosmos_db_write_failed',
+						'code' => $code,
+						'response' => $response,
+						'log_data' => $logData
+					];
+					file_put_contents(
+						C_REST_LOGS_DIR . 'cosmos_error_' . date("Y-m-d_H-i-s") . '.log',
+						json_encode($errorLog, JSON_PRETTY_PRINT)
+					);
+				}
+			} catch (Exception $e) {
+				// W przypadku wyjątku, zapisz go do pliku
+				$errorLog = [
+					'error' => 'cosmos_db_exception',
+					'message' => $e->getMessage(),
+					'trace' => $e->getTraceAsString(),
+					'log_data' => $logData ?? []
+				];
+				file_put_contents(
+					C_REST_LOGS_DIR . 'cosmos_exception_' . date("Y-m-d_H-i-s") . '.log',
+					json_encode($errorLog, JSON_PRETTY_PRINT)
+				);
 			}
 		}
 	}
