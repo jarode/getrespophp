@@ -22,6 +22,13 @@ class CRest
 	const BATCH_COUNT    = 50;//count batch 1 query
 	const TYPE_TRANSPORT = 'json';// json or xml
 
+	// Cosmos DB configuration
+	const COSMOS_ENDPOINT = 'https://bitrixsubscriptionsdb.documents.azure.com:443/';
+	const COSMOS_KEY = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw==';
+	const COSMOS_DATABASE = 'bitrixapp';
+	const COSMOS_CONTAINER_SUBSCRIPTIONS = 'subscriptions';
+	const COSMOS_CONTAINER_LOGS = 'logs';
+
 	/**
 	 * Build authorization token for Cosmos DB
 	 */
@@ -35,6 +42,91 @@ class CRest
 		$signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
 
 		return urlencode("type={$keyType}&ver={$tokenVersion}&sig={$signature}");
+	}
+
+	/**
+	 * Get document from Cosmos DB by domain
+	 */
+	protected static function cosmos_get_by_domain($domain) {
+		$resourceLink = "dbs/" . self::COSMOS_DATABASE . "/colls/" . self::COSMOS_CONTAINER_SUBSCRIPTIONS;
+		$query = "SELECT * FROM c WHERE c.domain = @domain";
+		$params = [['name' => '@domain', 'value' => $domain]];
+		
+		$utcDate = gmdate('D, d M Y H:i:s T');
+		$token = self::build_auth_token('POST', 'docs', $resourceLink, $utcDate, self::COSMOS_KEY);
+		
+		$headers = [
+			'Content-Type: application/query+json',
+			'x-ms-documentdb-isquery: true',
+			'x-ms-date: ' . $utcDate,
+			'x-ms-version: 2023-11-15',
+			'Authorization: ' . $token
+		];
+		
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_URL, self::COSMOS_ENDPOINT . $resourceLink . '/docs');
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_POST, true);
+		curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
+			'query' => $query,
+			'parameters' => $params
+		]));
+		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+		
+		$response = curl_exec($ch);
+		$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		curl_close($ch);
+		
+		if ($code >= 200 && $code < 300) {
+			$result = json_decode($response, true);
+			return $result['Documents'][0] ?? null;
+		}
+		
+		return null;
+	}
+
+	/**
+	 * Update or insert document in Cosmos DB
+	 */
+	protected static function cosmos_update($domain, $fields) {
+		$resourceLink = "dbs/" . self::COSMOS_DATABASE . "/colls/" . self::COSMOS_CONTAINER_SUBSCRIPTIONS;
+		
+		// Get existing document
+		$existing = self::cosmos_get_by_domain($domain);
+		
+		// Prepare document
+		$document = [
+			'id' => $existing['id'] ?? uniqid(),
+			'domain' => $domain,
+			'updated_at' => date('c')
+		];
+		
+		// Merge with new fields
+		$document = array_merge($document, $fields);
+		
+		$utcDate = gmdate('D, d M Y H:i:s T');
+		$token = self::build_auth_token($existing ? 'PUT' : 'POST', 'docs', $resourceLink, $utcDate, self::COSMOS_KEY);
+		
+		$headers = [
+			'Content-Type: application/json',
+			'x-ms-date: ' . $utcDate,
+			'x-ms-version: 2023-11-15',
+			'x-ms-documentdb-partitionkey' => '["' . $domain . '"]',
+			'Authorization: ' . $token
+		];
+		
+		$ch = curl_init();
+		curl_setopt($ch, CURLOPT_URL, self::COSMOS_ENDPOINT . $resourceLink . '/docs' . ($existing ? '/' . $existing['id'] : ''));
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $existing ? 'PUT' : 'POST');
+		curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($document));
+		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+		
+		$response = curl_exec($ch);
+		$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+		curl_close($ch);
+		
+		return $code >= 200 && $code < 300;
 	}
 
 	/**
@@ -395,7 +487,7 @@ class CRest
 					$cosmosData = array_filter($cosmosData, fn($v) => $v !== null && $v !== '');
 
 					// Zapisz do Cosmos DB
-					$return = cosmos_update($domain, $cosmosData);
+					$return = static::cosmos_update($domain, $cosmosData);
 
 					// Zachowaj kompatybilność wsteczną - zapisz też do pliku
 					static::setSettingData($cosmosData);
@@ -434,7 +526,7 @@ class CRest
 		$domain = $_REQUEST['DOMAIN'] ?? null;
 		if ($domain) {
 			try {
-				$cosmosData = cosmos_get_by_domain($domain);
+				$cosmosData = static::cosmos_get_by_domain($domain);
 				if (!empty($cosmosData)) {
 					// Zachowaj kompatybilność wsteczną - zapisz też do pliku
 					static::setSettingData($cosmosData);
@@ -462,7 +554,7 @@ class CRest
 			// Jeśli mamy dane w pliku, spróbujmy je zsynchronizować z Cosmos DB
 			if ($domain) {
 				try {
-					cosmos_update($domain, $arData);
+					static::cosmos_update($domain, $arData);
 				} catch (Exception $e) {
 					static::setLog([
 						'error' => 'cosmos_db_sync_failed',
