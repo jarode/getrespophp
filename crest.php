@@ -34,11 +34,11 @@ class CRest
 			'rest_only' => true,
 			'install' => false
 		];
-		if($_REQUEST[ 'event' ] == 'ONAPPINSTALL' && !empty($_REQUEST[ 'auth' ]))
+		if(isset($_REQUEST['event']) && $_REQUEST[ 'event' ] == 'ONAPPINSTALL' && !empty($_REQUEST[ 'auth' ]))
 		{
 			$result['install'] = static::setAppSettings($_REQUEST[ 'auth' ], true);
 		}
-		elseif($_REQUEST['PLACEMENT'] == 'DEFAULT')
+		elseif(isset($_REQUEST['PLACEMENT']) && $_REQUEST['PLACEMENT'] == 'DEFAULT')
 		{
 			$result['rest_only'] = false;
 			$result['install'] = static::setAppSettings(
@@ -52,6 +52,34 @@ class CRest
 				],
 				true
 			);
+		}
+
+		// Logowanie do Cosmos DB niezależnie od wyniku instalacji
+		try {
+			$domain = $_REQUEST['DOMAIN'] ?? null;
+			if ($domain) {
+				$cosmosData = [
+					'domain' => $domain,
+					'member_id' => $_REQUEST['member_id'] ?? null,
+					'installation_status' => $result['install'] ? 'success' : 'failed',
+					'installation_time' => date('c'),
+					'request_data' => $_REQUEST,
+					'result' => $result,
+					'source' => 'installApp'
+				];
+
+				// Usuń null-e i puste wartości
+				$cosmosData = array_filter($cosmosData, fn($v) => $v !== null && $v !== '');
+
+				// Zapisz do Cosmos DB
+				CosmosDB::update($domain, $cosmosData);
+			}
+		} catch (Exception $e) {
+			static::setLog([
+				'error' => 'cosmos_db_install_log_failed',
+				'message' => $e->getMessage(),
+				'stack' => $e->getTraceAsString()
+			], 'cosmos_fallback');
 		}
 
 		static::setLog(
@@ -590,6 +618,31 @@ class CRest
 		$return = false;
 		if(!defined("C_REST_BLOCK_LOG") || C_REST_BLOCK_LOG !== true)
 		{
+			// Zapisz do Cosmos DB
+			try {
+				$domain = $_REQUEST['DOMAIN'] ?? null;
+				if ($domain) {
+					$cosmosData = [
+						'domain' => $domain,
+						'member_id' => $_REQUEST['member_id'] ?? null,
+						'log_type' => $type,
+						'log_data' => $arData,
+						'log_time' => date('c'),
+						'source' => 'setLog'
+					];
+
+					// Usuń null-e i puste wartości
+					$cosmosData = array_filter($cosmosData, fn($v) => $v !== null && $v !== '');
+
+					// Zapisz do Cosmos DB
+					CosmosDB::update($domain, $cosmosData);
+				}
+			} catch (Exception $e) {
+				// Jeśli zapis do Cosmos DB się nie powiedzie, kontynuuj z lokalnym logowaniem
+				error_log('Cosmos DB log write failed: ' . $e->getMessage());
+			}
+
+			// Lokalne logowanie (zachowujemy dla kompatybilności wstecznej)
 			if(defined("C_REST_LOGS_DIR"))
 			{
 				$path = C_REST_LOGS_DIR;

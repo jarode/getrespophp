@@ -1,7 +1,20 @@
 <?php
 require_once (__DIR__.'/crest.php');
 
-$install_result = CRest::installApp();
+$result = CRest::installApp();
+if($result['install'])
+{
+	$protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https' : 'http';
+	$host = $_SERVER['HTTP_HOST'];
+	$path = dirname($_SERVER['REQUEST_URI']);
+	$redirectUrl = $protocol . '://' . $host . $path . '/index.php';
+	header('Location: ' . $redirectUrl);
+	exit;
+}
+else
+{
+	echo 'installation error';
+}
 
 // embedded for placement "placement.php"
 $handlerBackUrl = ($_SERVER['HTTPS'] === 'on' || $_SERVER['SERVER_PORT'] === '443' ? 'https' : 'http') . '://'
@@ -32,10 +45,10 @@ $result = CRest::call(
 
 CRest::setLog(['add' => $result], 'installation');
 
-if($install_result['rest_only'] === false):?>
+if($result['rest_only'] === false):?>
 <head>
 	<script src="//api.bitrix24.com/api/v1/"></script>
-	<?if($install_result['install'] == true):?>
+	<?if($result['install'] == true):?>
 	<script>
 		BX24.init(function(){
 			BX24.installFinish();
@@ -44,7 +57,7 @@ if($install_result['rest_only'] === false):?>
 	<?endif;?>
 </head>
 <body>
-	<?if($install_result['install'] == true):?>
+	<?if($result['install'] == true):?>
 		installation has been finished
 	<?else:?>
 		installation error
