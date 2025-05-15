@@ -1,6 +1,6 @@
 <?php
 require_once (__DIR__.'/settings.php');
-require_once (__DIR__.'/cosmos.php');
+//require_once (__DIR__.'/cosmos.php');
 
 /**
  *  @version 1.36
@@ -389,43 +389,7 @@ class CRest
 			{
 				$arSettings = array_merge($oldData, $arSettings);
 			}
-
-			// Główny zapis do Cosmos DB
-			try {
-				$domain = $arSettings['domain'] ?? $_REQUEST['DOMAIN'] ?? null;
-				if ($domain) {
-					$cosmosData = [
-						'domain' => $domain,
-						'member_id' => $arSettings['member_id'] ?? ($_REQUEST['member_id'] ?? null),
-						'access_token' => $arSettings['access_token'] ?? null,
-						'refresh_token' => $arSettings['refresh_token'] ?? null,
-						'client_endpoint' => $arSettings['client_endpoint'] ?? null,
-						'application_token' => $arSettings['application_token'] ?? null,
-						'app_installed' => $isInstall ? date('c') : null,
-						'source' => 'setAppSettings',
-						'updated_at' => date('c')
-					];
-
-					// Usuń null-e i puste wartości
-					$cosmosData = array_filter($cosmosData, fn($v) => $v !== null && $v !== '');
-
-					// Zapisz do Cosmos DB
-					$return = CosmosDB::update($domain, $cosmosData);
-
-					// Zachowaj kompatybilność wsteczną - zapisz też do pliku
-					static::setSettingData($cosmosData);
-				}
-			} catch (Exception $e) {
-				// Fallback do pliku
-				$return = static::setSettingData($arSettings);
-				
-				static::setLog([
-					'error' => 'cosmos_db_write_failed',
-					'message' => $e->getMessage(),
-					'stack' => $e->getTraceAsString(),
-					'data' => $arSettings
-				], 'cosmos_fallback');
-			}
+			$return = static::setSettingData($arSettings);
 		}
 		return $return;
 	}
@@ -444,27 +408,6 @@ class CRest
 			];
 			return $arData;
 		}
-
-		// Najpierw próbujemy pobrać z Cosmos DB
-		$domain = $_REQUEST['DOMAIN'] ?? null;
-		if ($domain) {
-			try {
-				$cosmosData = CosmosDB::get_by_domain($domain);
-				if (!empty($cosmosData)) {
-					// Zachowaj kompatybilność wsteczną - zapisz też do pliku
-					static::setSettingData($cosmosData);
-					return $cosmosData;
-				}
-			} catch (Exception $e) {
-				static::setLog([
-					'error' => 'cosmos_db_read_failed',
-					'message' => $e->getMessage(),
-					'stack' => $e->getTraceAsString()
-				], 'cosmos_fallback');
-			}
-		}
-
-		// Fallback do pliku settings.json
 		$arData = static::getSettingData();
 		if(
 			!empty($arData[ 'access_token' ]) &&
@@ -474,21 +417,8 @@ class CRest
 			!empty($arData[ 'client_endpoint' ])
 		)
 		{
-			// Jeśli mamy dane w pliku, spróbujmy je zsynchronizować z Cosmos DB
-			if ($domain) {
-				try {
-					CosmosDB::update($domain, $arData);
-				} catch (Exception $e) {
-					static::setLog([
-						'error' => 'cosmos_db_sync_failed',
-						'message' => $e->getMessage(),
-						'stack' => $e->getTraceAsString()
-					], 'cosmos_fallback');
-				}
-			}
 			return $arData;
 		}
-
 		return false;
 	}
 
