@@ -42,6 +42,9 @@ jobs:
           containerAppName: bitrix-php-app
           resourceGroup: BitrixGroup
           imageToBuild: bitrixregistry.azurecr.io/bitrix-php-app:${{ github.sha }}
+          environmentVariables: |
+            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+            STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
           _buildArgumentsKey_: |
             _buildArgumentsValues_
 
