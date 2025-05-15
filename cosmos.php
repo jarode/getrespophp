@@ -134,4 +134,36 @@ class CosmosDB
             'curl_error' => $curlError
         ];
     }
+
+    /**
+     * Get settings document from Cosmos DB by domain
+     */
+    public static function getSettings($domain) {
+        $result = self::queryByDomain($domain);
+        if ($result['code'] >= 200 && $result['code'] < 300) {
+            $data = json_decode($result['response'], true);
+            if (isset($data['Documents'][0])) {
+                return $data['Documents'][0];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Set (insert or update) settings document in Cosmos DB by domain
+     */
+    public static function setSettings($domain, $settingsArray) {
+        // Sprawdź, czy istnieje dokument dla domeny
+        $existing = self::getSettings($domain);
+        if ($existing && isset($existing['id'])) {
+            $settingsArray['id'] = $existing['id'];
+            return self::update($domain, $settingsArray);
+        } else {
+            if (!isset($settingsArray['id'])) {
+                $settingsArray['id'] = uniqid();
+            }
+            $settingsArray['domain'] = $domain;
+            return self::insert($domain, $settingsArray);
+        }
+    }
 } 
