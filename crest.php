@@ -1,6 +1,6 @@
 <?php
 require_once (__DIR__.'/settings.php');
-//require_once (__DIR__.'/cosmos.php');
+require_once (__DIR__.'/cosmos.php');
 
 /**
  *  @version 1.36
