@@ -135,8 +135,12 @@ function cosmos_update($domain, $fields) {
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
-    // Log do pliku (opcjonalnie)
-    file_put_contents(__DIR__ . '/logs/cosmos_update_' . time() . '.json', json_encode([
+    // Log do pliku (opcjonalnie — można zastąpić cosmos_log())
+    $logDir = __DIR__ . '/logs';
+    if (!is_dir($logDir)) {
+        mkdir($logDir, 0775, true);
+    }
+    file_put_contents($logDir . '/cosmos_update_' . time() . '.json', json_encode([
         'domain' => $domain,
         'payload' => $merged,
         'response' => $response,
