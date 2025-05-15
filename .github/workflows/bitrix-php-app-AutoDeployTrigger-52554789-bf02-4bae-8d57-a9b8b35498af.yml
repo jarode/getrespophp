@@ -7,7 +7,7 @@ on:
     branches: 
       [ main ]
     paths:
-    - '**'
+    - '**.php'
     - '.github/workflows/bitrix-php-app-AutoDeployTrigger-52554789-bf02-4bae-8d57-a9b8b35498af.yml'
 
   # Allow manual trigger 
