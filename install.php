@@ -13,24 +13,13 @@ $handlerBackUrl = ($_SERVER['HTTPS'] === 'on' || $_SERVER['SERVER_PORT'] === '44
 $result = CRest::call(
 	'event.bind',
 	[
-		'EVENT' => 'ONCRMCONTACTUPDATE',
-		'HANDLER' => $handlerBackUrl,
-        'EVENT_TYPE' => 'online'
-	]
-);
-
-CRest::setLog(['update' => $result], 'installation');
-
-$result = CRest::call(
-	'event.bind',
-	[
-		'EVENT' => 'ONCRMCONTACTADD',
+		'EVENT' => 'ONCRMLEADADD',
 		'HANDLER' => $handlerBackUrl,
 		'EVENT_TYPE' => 'online'
 	]
 );
 
-CRest::setLog(['add' => $result], 'installation');
+CRest::setLog(['lead_add' => $result], 'installation');
 
 if($install_result['rest_only'] === false):?>
 <head>
