@@ -553,6 +553,7 @@ class CRest
 				$domain = $_REQUEST['DOMAIN'] ?? null;
 				if ($domain) {
 					$cosmosData = [
+						'id' => uniqid(),
 						'domain' => $domain,
 						'member_id' => $_REQUEST['member_id'] ?? null,
 						'log_type' => $type,
@@ -560,15 +561,12 @@ class CRest
 						'log_time' => date('c'),
 						'source' => 'setLog'
 					];
-
-					// Usuń null-e i puste wartości
-					$cosmosData = array_filter($cosmosData, fn($v) => $v !== null && $v !== '');
-
-					// Zapisz do Cosmos DB
-					CosmosDB::update($domain, $cosmosData);
+					$result = CosmosDB::insert($domain, $cosmosData);
+					if ($result['code'] < 200 || $result['code'] >= 300) {
+						error_log('Cosmos DB log write failed: ' . $result['response']);
+					}
 				}
 			} catch (Exception $e) {
-				// Jeśli zapis do Cosmos DB się nie powiedzie, kontynuuj z lokalnym logowaniem
 				error_log('Cosmos DB log write failed: ' . $e->getMessage());
 			}
 
