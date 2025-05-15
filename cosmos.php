@@ -100,4 +100,38 @@ class CosmosDB
             'curl_error' => $curlError
         ];
     }
+
+    /**
+     * Update document in Cosmos DB
+     */
+    public static function update($partitionKey, $document) {
+        $resourceLink = "dbs/" . self::DATABASE . "/colls/" . self::CONTAINER;
+        $date = gmdate('D, d M Y H:i:s T');
+        $token = self::build_auth_token('PUT', 'docs', $resourceLink, $date, self::KEY);
+
+        $headers = [
+            'Authorization: ' . $token,
+            'x-ms-date: ' . $date,
+            'x-ms-version: ' . self::API_VERSION,
+            'Content-Type: application/json',
+            'x-ms-documentdb-partitionkey: ["' . $partitionKey . '"]'
+        ];
+
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, self::ENDPOINT . $resourceLink . '/docs');
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($document));
+        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+        $response = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+
+        return [
+            'code' => $code,
+            'response' => $response,
+            'curl_error' => $curlError
+        ];
+    }
 } 
