@@ -1,6 +1,5 @@
 <?php
 require_once __DIR__ . '/crest.php';
-require_once __DIR__ . '/cosmos.php';
 
 // 1. Inicjalizacja instalacji i zapis do settings.json + Cosmos DB
 $install_result = CRest::installApp();

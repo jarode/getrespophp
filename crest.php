@@ -1,18 +1,5 @@
 <?php
 require_once (__DIR__.'/settings.php');
-require_once (__DIR__.'/cosmos.php');
-
-function build_auth_token($verb, $resourceType, $resourceLink, $utcDate, $key, $keyType = 'master', $tokenVersion = '1.0') {
-    $stringToSign = strtolower($verb) . "\n" .
-                    strtolower($resourceType) . "\n" .
-                    $resourceLink . "\n" .
-                    strtolower($utcDate) . "\n\n";
-
-    $decodedKey = base64_decode($key);
-    $signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
-
-    return urlencode("type={$keyType}&ver={$tokenVersion}&sig={$signature}");
-}
 
 /**
  *  @version 1.36
@@ -34,6 +21,21 @@ class CRest
 	const VERSION = '1.36';
 	const BATCH_COUNT    = 50;//count batch 1 query
 	const TYPE_TRANSPORT = 'json';// json or xml
+
+	/**
+	 * Build authorization token for Cosmos DB
+	 */
+	protected static function build_auth_token($verb, $resourceType, $resourceLink, $utcDate, $key, $keyType = 'master', $tokenVersion = '1.0') {
+		$stringToSign = strtolower($verb) . "\n" .
+						strtolower($resourceType) . "\n" .
+						$resourceLink . "\n" .
+						strtolower($utcDate) . "\n\n";
+
+		$decodedKey = base64_decode($key);
+		$signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
+
+		return urlencode("type={$keyType}&ver={$tokenVersion}&sig={$signature}");
+	}
 
 	/**
 	 * call where install application even url
@@ -653,7 +655,7 @@ class CRest
 				$url = $endpoint . $resourceLink . '/docs';
 
 				$utcDate = gmdate('D, d M Y H:i:s T');
-				$token = build_auth_token('POST', 'docs', $resourceLink, $utcDate, $key);
+				$token = static::build_auth_token('POST', 'docs', $resourceLink, $utcDate, $key);
 
 				$logDocument = [
 					'id' => uniqid(),
