@@ -41,17 +41,27 @@ class CRest
 		elseif(isset($_REQUEST['PLACEMENT']) && $_REQUEST['PLACEMENT'] == 'DEFAULT')
 		{
 			$result['rest_only'] = false;
-			$result['install'] = static::setAppSettings(
-				[
-					'access_token' => htmlspecialchars($_REQUEST['AUTH_ID']),
-					'expires_in' => htmlspecialchars($_REQUEST['AUTH_EXPIRES']),
-					'application_token' => htmlspecialchars($_REQUEST['APP_SID']),
-					'refresh_token' => htmlspecialchars($_REQUEST['REFRESH_ID']),
-					'domain' => htmlspecialchars($_REQUEST['DOMAIN']),
-					'client_endpoint' => 'https://' . htmlspecialchars($_REQUEST['DOMAIN']) . '/rest/',
-				],
-				true
-			);
+			$settings = [
+				'access_token' => htmlspecialchars($_REQUEST['AUTH_ID']),
+				'expires_in' => htmlspecialchars($_REQUEST['AUTH_EXPIRES']),
+				'application_token' => htmlspecialchars($_REQUEST['APP_SID']),
+				'refresh_token' => htmlspecialchars($_REQUEST['REFRESH_ID']),
+				'domain' => htmlspecialchars($_REQUEST['DOMAIN']),
+				'client_endpoint' => 'https://' . htmlspecialchars($_REQUEST['DOMAIN']) . '/rest/',
+			];
+			// Inicjalizacja licencji jeśli nie istnieje
+			$existing = CosmosDB::getSettings($settings['domain']);
+			if (!$existing || empty($existing['license_status'])) {
+				$settings['license_status'] = 'trial';
+				$settings['license_expiry'] = date('Y-m-d', strtotime('+14 days'));
+				$settings['subscription_type'] = 'trial';
+			} else {
+				// Zachowaj istniejące pola licencyjne
+				$settings['license_status'] = $existing['license_status'];
+				$settings['license_expiry'] = $existing['license_expiry'];
+				$settings['subscription_type'] = $existing['subscription_type'];
+			}
+			$result['install'] = static::setAppSettings($settings, true);
 		}
 
 		// Logowanie do Cosmos DB niezależnie od wyniku instalacji
