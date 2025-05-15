@@ -22,113 +22,6 @@ class CRest
 	const BATCH_COUNT    = 50;//count batch 1 query
 	const TYPE_TRANSPORT = 'json';// json or xml
 
-	// Cosmos DB configuration
-	const COSMOS_ENDPOINT = 'https://bitrixsubscriptionsdb.documents.azure.com:443/';
-	const COSMOS_KEY = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw==';
-	const COSMOS_DATABASE = 'bitrixapp';
-	const COSMOS_CONTAINER_SUBSCRIPTIONS = 'subscriptions';
-	const COSMOS_CONTAINER_LOGS = 'logs';
-
-	/**
-	 * Build authorization token for Cosmos DB
-	 */
-	protected static function build_auth_token($verb, $resourceType, $resourceLink, $utcDate, $key, $keyType = 'master', $tokenVersion = '1.0') {
-		$stringToSign = strtolower($verb) . "\n" .
-						strtolower($resourceType) . "\n" .
-						$resourceLink . "\n" .
-						strtolower($utcDate) . "\n\n";
-
-		$decodedKey = base64_decode($key);
-		$signature = base64_encode(hash_hmac('sha256', $stringToSign, $decodedKey, true));
-
-		return urlencode("type={$keyType}&ver={$tokenVersion}&sig={$signature}");
-	}
-
-	/**
-	 * Get document from Cosmos DB by domain
-	 */
-	protected static function cosmos_get_by_domain($domain) {
-		$resourceLink = "dbs/" . self::COSMOS_DATABASE . "/colls/" . self::COSMOS_CONTAINER_SUBSCRIPTIONS;
-		$query = "SELECT * FROM c WHERE c.domain = @domain";
-		$params = [['name' => '@domain', 'value' => $domain]];
-		
-		$utcDate = gmdate('D, d M Y H:i:s T');
-		$token = self::build_auth_token('POST', 'docs', $resourceLink, $utcDate, self::COSMOS_KEY);
-		
-		$headers = [
-			'Content-Type: application/query+json',
-			'x-ms-documentdb-isquery: true',
-			'x-ms-date: ' . $utcDate,
-			'x-ms-version: 2023-11-15',
-			'Authorization: ' . $token
-		];
-		
-		$ch = curl_init();
-		curl_setopt($ch, CURLOPT_URL, self::COSMOS_ENDPOINT . $resourceLink . '/docs');
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($ch, CURLOPT_POST, true);
-		curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
-			'query' => $query,
-			'parameters' => $params
-		]));
-		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-		
-		$response = curl_exec($ch);
-		$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-		curl_close($ch);
-		
-		if ($code >= 200 && $code < 300) {
-			$result = json_decode($response, true);
-			return $result['Documents'][0] ?? null;
-		}
-		
-		return null;
-	}
-
-	/**
-	 * Update or insert document in Cosmos DB
-	 */
-	protected static function cosmos_update($domain, $fields) {
-		$resourceLink = "dbs/" . self::COSMOS_DATABASE . "/colls/" . self::COSMOS_CONTAINER_SUBSCRIPTIONS;
-		
-		// Get existing document
-		$existing = self::cosmos_get_by_domain($domain);
-		
-		// Prepare document
-		$document = [
-			'id' => $existing['id'] ?? uniqid(),
-			'domain' => $domain,
-			'updated_at' => date('c')
-		];
-		
-		// Merge with new fields
-		$document = array_merge($document, $fields);
-		
-		$utcDate = gmdate('D, d M Y H:i:s T');
-		$token = self::build_auth_token($existing ? 'PUT' : 'POST', 'docs', $resourceLink, $utcDate, self::COSMOS_KEY);
-		
-		$headers = [
-			'Content-Type: application/json',
-			'x-ms-date: ' . $utcDate,
-			'x-ms-version: 2023-11-15',
-			'x-ms-documentdb-partitionkey' => '["' . $domain . '"]',
-			'Authorization: ' . $token
-		];
-		
-		$ch = curl_init();
-		curl_setopt($ch, CURLOPT_URL, self::COSMOS_ENDPOINT . $resourceLink . '/docs' . ($existing ? '/' . $existing['id'] : ''));
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, $existing ? 'PUT' : 'POST');
-		curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($document));
-		curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-		
-		$response = curl_exec($ch);
-		$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-		curl_close($ch);
-		
-		return $code >= 200 && $code < 300;
-	}
-
 	/**
 	 * call where install application even url
 	 * only for rest application, not webhook
@@ -140,11 +33,11 @@ class CRest
 			'rest_only' => true,
 			'install' => false
 		];
-		if(isset($_REQUEST['event']) && $_REQUEST['event'] == 'ONAPPINSTALL' && !empty($_REQUEST['auth']))
+		if($_REQUEST[ 'event' ] == 'ONAPPINSTALL' && !empty($_REQUEST[ 'auth' ]))
 		{
-			$result['install'] = static::setAppSettings($_REQUEST['auth'], true);
+			$result['install'] = static::setAppSettings($_REQUEST[ 'auth' ], true);
 		}
-		elseif(isset($_REQUEST['PLACEMENT']) && $_REQUEST['PLACEMENT'] == 'DEFAULT')
+		elseif($_REQUEST['PLACEMENT'] == 'DEFAULT')
 		{
 			$result['rest_only'] = false;
 			$result['install'] = static::setAppSettings(
@@ -460,57 +353,22 @@ class CRest
 	private static function setAppSettings($arSettings, $isInstall = false)
 	{
 		$return = false;
-
-		if (is_array($arSettings)) {
+		if(is_array($arSettings))
+		{
 			$oldData = static::getAppSettings();
-			if ($isInstall !== true && !empty($oldData) && is_array($oldData)) {
+			if($isInstall != true && !empty($oldData) && is_array($oldData))
+			{
 				$arSettings = array_merge($oldData, $arSettings);
 			}
-
-			// Główny zapis do Cosmos DB
-			try {
-				$domain = $arSettings['domain'] ?? $_REQUEST['DOMAIN'] ?? null;
-				if ($domain) {
-					$cosmosData = [
-						'domain' => $domain,
-						'member_id' => $arSettings['member_id'] ?? ($_REQUEST['member_id'] ?? null),
-						'access_token' => $arSettings['access_token'] ?? null,
-						'refresh_token' => $arSettings['refresh_token'] ?? null,
-						'client_endpoint' => $arSettings['client_endpoint'] ?? null,
-						'application_token' => $arSettings['application_token'] ?? null,
-						'app_installed' => $isInstall ? date('c') : null,
-						'source' => 'setAppSettings',
-						'updated_at' => date('c')
-					];
-
-					// Usuń null-e i puste wartości
-					$cosmosData = array_filter($cosmosData, fn($v) => $v !== null && $v !== '');
-
-					// Zapisz do Cosmos DB
-					$return = static::cosmos_update($domain, $cosmosData);
-
-					// Zachowaj kompatybilność wsteczną - zapisz też do pliku
-					static::setSettingData($cosmosData);
-				}
-			} catch (Exception $e) {
-				// Fallback do pliku
-				$return = static::setSettingData($arSettings);
-				
-				static::setLog([
-					'error' => 'cosmos_db_write_failed',
-					'message' => $e->getMessage(),
-					'stack' => $e->getTraceAsString(),
-					'data' => $arSettings
-				], 'cosmos_fallback');
-			}
+			$return = static::setSettingData($arSettings);
 		}
-
 		return $return;
 	}
 
 	/**
 	 * @return mixed setting application for query
 	 */
+
 	private static function getAppSettings()
 	{
 		if(defined("C_REST_WEB_HOOK_URL") && !empty(C_REST_WEB_HOOK_URL))
@@ -519,54 +377,25 @@ class CRest
 				'client_endpoint' => C_REST_WEB_HOOK_URL,
 				'is_web_hook'     => 'Y'
 			];
-			return $arData;
+			$isCurrData = true;
 		}
-
-		// Najpierw próbujemy pobrać z Cosmos DB
-		$domain = $_REQUEST['DOMAIN'] ?? null;
-		if ($domain) {
-			try {
-				$cosmosData = static::cosmos_get_by_domain($domain);
-				if (!empty($cosmosData)) {
-					// Zachowaj kompatybilność wsteczną - zapisz też do pliku
-					static::setSettingData($cosmosData);
-					return $cosmosData;
-				}
-			} catch (Exception $e) {
-				static::setLog([
-					'error' => 'cosmos_db_read_failed',
-					'message' => $e->getMessage(),
-					'stack' => $e->getTraceAsString()
-				], 'cosmos_fallback');
-			}
-		}
-
-		// Fallback do pliku settings.json
-		$arData = static::getSettingData();
-		if(
-			!empty($arData[ 'access_token' ]) &&
-			!empty($arData[ 'domain' ]) &&
-			!empty($arData[ 'refresh_token' ]) &&
-			!empty($arData[ 'application_token' ]) &&
-			!empty($arData[ 'client_endpoint' ])
-		)
+		else
 		{
-			// Jeśli mamy dane w pliku, spróbujmy je zsynchronizować z Cosmos DB
-			if ($domain) {
-				try {
-					static::cosmos_update($domain, $arData);
-				} catch (Exception $e) {
-					static::setLog([
-						'error' => 'cosmos_db_sync_failed',
-						'message' => $e->getMessage(),
-						'stack' => $e->getTraceAsString()
-					], 'cosmos_fallback');
-				}
+			$arData = static::getSettingData();
+			$isCurrData = false;
+			if(
+				!empty($arData[ 'access_token' ]) &&
+				!empty($arData[ 'domain' ]) &&
+				!empty($arData[ 'refresh_token' ]) &&
+				!empty($arData[ 'application_token' ]) &&
+				!empty($arData[ 'client_endpoint' ])
+			)
+			{
+				$isCurrData = true;
 			}
-			return $arData;
 		}
 
-		return false;
+		return ($isCurrData) ? $arData : false;
 	}
 
 	/**
@@ -692,120 +521,43 @@ class CRest
 
 	public static function setLog($arData, $type = '')
 	{
+		$return = false;
 		if(!defined("C_REST_BLOCK_LOG") || C_REST_BLOCK_LOG !== true)
 		{
-			// Oryginalne logowanie do pliku
 			if(defined("C_REST_LOGS_DIR"))
 			{
 				$path = C_REST_LOGS_DIR;
-				if(!is_dir($path))
-				{
-					mkdir($path, 0775, true);
-				}
+			}
+			else
+			{
+				$path = __DIR__ . '/logs/';
+			}
+			$path .= date("Y-m-d/H") . '/';
 
-				$path .= date("Y-m-d/H") . "/";
-
-				if(!is_dir($path))
-				{
-					mkdir($path, 0775, true);
-				}
-
-				$path .= $type . "_" . date("Y-m-d_H-i-s") . "_" . randString(8) . ".log";
-
-				$jsonLog = json_encode($arData);
-				if(!empty($jsonLog))
-				{
-					$jsonLog = json_encode($arData, JSON_PRETTY_PRINT);
-				}
-				elseif(defined("C_REST_LOG_TYPE_DUMP") && C_REST_LOG_TYPE_DUMP === true)
-				{
-					$jsonLog = var_export($arData, 1);
-				}
-
-				file_put_contents($path, $jsonLog);
+			if (!file_exists($path))
+			{
+				@mkdir($path, 0775, true);
 			}
 
-			// Dodatkowe logowanie do Cosmos DB
-			try {
-				$logData = [
-					'domain' => $_REQUEST['DOMAIN'] ?? 'unknown',
-					'type' => $type ?: 'general',
-					'data' => $arData,
-					'status' => isset($arData['error']) ? 'error' : 'success',
-					'metadata' => [
-						'source' => 'bitrix24',
-						'action' => $type
-					]
-				];
-
-				// Funkcja do wysyłania logów do Cosmos DB
-				$endpoint = 'https://bitrixsubscriptionsdb.documents.azure.com:443/';
-				$key = 'odY3Dp2pgTdoxv7NGoipcqmFJwit4pfhd4hdOzxOxQmFN1yevkKNRB8oRKafzUTZbAisDyoPHGGeACDbVIfAmw==';
-				$databaseId = 'bitrixapp';
-				$containerId = 'logs';
-				$resourceLink = "dbs/{$databaseId}/colls/{$containerId}";
-				$url = $endpoint . $resourceLink . '/docs';
-
-				$utcDate = gmdate('D, d M Y H:i:s T');
-				$token = static::build_auth_token('POST', 'docs', $resourceLink, $utcDate, $key);
-
-				$logDocument = [
-					'id' => uniqid(),
-					'timestamp' => date('c'),
-					'domain' => $logData['domain'],
-					'type' => $logData['type'],
-					'data' => $logData['data'],
-					'status' => $logData['status'],
-					'metadata' => $logData['metadata']
-				];
-
-				$headers = [
-					'Content-Type: application/json',
-					'Accept: application/json',
-					'x-ms-date: ' . $utcDate,
-					'x-ms-version: ' . '2023-11-15',
-					'x-ms-documentdb-partitionkey' => '["' . $logDocument['domain'] . '"]',
-					'Authorization: ' . $token
-				];
-
-				$ch = curl_init();
-				curl_setopt($ch, CURLOPT_URL, $url);
-				curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
-				curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-				curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($logDocument));
-				curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-
-				$response = curl_exec($ch);
-				$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-				curl_close($ch);
-
-				// Jeśli wystąpił błąd przy zapisie do Cosmos DB, zapisz go do pliku
-				if ($code < 200 || $code >= 300) {
-					$errorLog = [
-						'error' => 'cosmos_db_write_failed',
-						'code' => $code,
-						'response' => $response,
-						'log_data' => $logData
-					];
-					file_put_contents(
-						C_REST_LOGS_DIR . 'cosmos_error_' . date("Y-m-d_H-i-s") . '.log',
-						json_encode($errorLog, JSON_PRETTY_PRINT)
-					);
+			$path .= time() . '_' . $type . '_' . rand(1, 9999999) . 'log';
+			if(!defined("C_REST_LOG_TYPE_DUMP") || C_REST_LOG_TYPE_DUMP !== true)
+			{
+				$jsonLog = static::wrapData($arData);
+				if ($jsonLog === false)
+				{
+					$return = file_put_contents($path . '_backup.txt', var_export($arData, true));
 				}
-			} catch (Exception $e) {
-				// W przypadku wyjątku, zapisz go do pliku
-				$errorLog = [
-					'error' => 'cosmos_db_exception',
-					'message' => $e->getMessage(),
-					'trace' => $e->getTraceAsString(),
-					'log_data' => $logData ?? []
-				];
-				file_put_contents(
-					C_REST_LOGS_DIR . 'cosmos_exception_' . date("Y-m-d_H-i-s") . '.log',
-					json_encode($errorLog, JSON_PRETTY_PRINT)
-				);
+				else
+				{
+					$return = file_put_contents($path . '.json', $jsonLog);
+				}
+			}
+			else
+			{
+				$return = file_put_contents($path . '.txt', var_export($arData, true));
 			}
 		}
+		return $return;
 	}
 
 	/**
