@@ -7,13 +7,30 @@ if ($_REQUEST['event'] === 'ONCRMLEADADD') {
 		// Pobierz dane leada z Bitrix24
 		$leadResult = CRest::call('crm.lead.get', ['ID' => $leadId]);
 		$lead = $leadResult['result'] ?? null;
-		if ($lead) {
+		$email = $lead['EMAIL'][0]['VALUE'] ?? '';
+		$name = $lead['NAME'] ?? '';
+
+		// Jeśli nie ma emaila lub imienia, a jest CONTACT_ID, pobierz kontakt
+		if ((empty($email) || empty($name)) && !empty($lead['CONTACT_ID'])) {
+			$contactResult = CRest::call('crm.contact.get', ['ID' => $lead['CONTACT_ID']]);
+			$contact = $contactResult['result'] ?? null;
+			if ($contact) {
+				if (empty($email)) {
+					$email = $contact['EMAIL'][0]['VALUE'] ?? '';
+				}
+				if (empty($name)) {
+					$name = $contact['NAME'] ?? '';
+				}
+			}
+		}
+
+		if (!empty($email)) {
 			// Przygotuj dane do GetResponse
 			$apiKey = '62a96f1wzus8pp7s6o83s233j2to908k'; // ← Twój klucz
 			$listId = 'id0Rg';   // ← Twoje ID kampanii
 			$contactData = [
-				'email' => $lead['EMAIL'][0]['VALUE'] ?? '',
-				'name' => $lead['NAME'] ?? '',
+				'email' => $email,
+				'name' => $name,
 				'campaign' => ['campaignId' => $listId],
 				// Dodaj inne mapowania pól jeśli potrzeba
 			];
@@ -35,6 +52,7 @@ if ($_REQUEST['event'] === 'ONCRMLEADADD') {
 			$logData = [
 				'lead_id' => $leadId,
 				'lead_data' => $lead,
+				'contact_data' => $contact ?? null,
 				'getresponse_payload' => $contactData,
 				'getresponse_response' => $response,
 				'getresponse_http_code' => $httpCode,
