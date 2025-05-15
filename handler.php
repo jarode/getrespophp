@@ -1,65 +1,53 @@
-<?
-include_once('crest.php');
+<?php
+require_once(__DIR__.'/crest.php');
 
-if(in_array($_REQUEST['event'], ['0' => 'ONCRMCONTACTUPDATE', '1' => 'ONCRMCONTACTADD']))
-{
+if ($_REQUEST['event'] === 'ONCRMLEADADD') {
+	$leadId = $_REQUEST['data']['FIELDS']['ID'] ?? null;
+	if ($leadId) {
+		// Pobierz dane leada z Bitrix24
+		$leadResult = CRest::call('crm.lead.get', ['ID' => $leadId]);
+		$lead = $leadResult['result'] ?? null;
+		if ($lead) {
+			// Przygotuj dane do GetResponse
+			$apiKey = '62a96f1wzus8pp7s6o83s233j2to908k'; // ← Twój klucz
+			$listId = 'id0Rg';   // ← Twoje ID kampanii
+			$contactData = [
+				'email' => $lead['EMAIL'][0]['VALUE'] ?? '',
+				'name' => $lead['NAME'] ?? '',
+				'campaign' => ['campaignId' => $listId],
+				// Dodaj inne mapowania pól jeśli potrzeba
+			];
+			// Wyślij do GetResponse
+			$ch = curl_init('https://api.getresponse.com/v3/contacts');
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+			curl_setopt($ch, CURLOPT_POST, true);
+			curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($contactData));
+			curl_setopt($ch, CURLOPT_HTTPHEADER, [
+				'Content-Type: application/json',
+				'X-Auth-Token: api-key ' . $apiKey
+			]);
+			$response = curl_exec($ch);
+			$httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+			$curlError = curl_error($ch);
+			curl_close($ch);
 
-	// $dir = $_SERVER['DOCUMENT_ROOT'] . __DIR__ . '/tmp/'; try this depending on your server configuration
-	$dir = 'tmp/';
-
-	if(!file_exists($dir))
-	{
-		mkdir($dir, 0777, true);
+			// Loguj do Cosmos DB
+			$logData = [
+				'lead_id' => $leadId,
+				'lead_data' => $lead,
+				'getresponse_payload' => $contactData,
+				'getresponse_response' => $response,
+				'getresponse_http_code' => $httpCode,
+				'getresponse_curl_error' => $curlError,
+				'time' => date('c'),
+				'source' => 'handler.php'
+			];
+			$domain = $_REQUEST['auth']['domain'] ?? ($_REQUEST['DOMAIN'] ?? null);
+			if ($domain) {
+				CosmosDB::insert($domain, $logData);
+			}
+		}
 	}
-
-	$get_result = CRest::call(
-		'crm.contact.get',
-		['ID' => $_REQUEST['data']['FIELDS']['ID'], ]
-	);
-
-	$name = mb_convert_case($get_result['result']['NAME'], MB_CASE_TITLE, "UTF-8");
-	$last_name = mb_convert_case($get_result['result']['LAST_NAME'], MB_CASE_TITLE, "UTF-8");
-	$middle_name = mb_convert_case($get_result['result']['SECOND_NAME'], MB_CASE_TITLE, "UTF-8");
-
-	if (
-		($get_result['result']['NAME'] != $name) ||
-		($get_result['result']['LAST_NAME'] != $last_name) ||
-		($get_result['result']['SECOND_NAME'] != $middle_name)
-	) {
-		$update_result = CRest::call(
-			'crm.contact.update',
-			[
-				'ID' => $_REQUEST['data']['FIELDS']['ID'],
-				'FIELDS' => [
-					'NAME' => $name,
-					'LAST_NAME' => $last_name,
-					'SECOND_NAME' => $middle_name
-				]
-			]
-		);
-	}
-
-	// save event to log
-	file_put_contents(
-		$dir . time() . '_' . rand(1, 9999) . '.txt',
-		var_export(
-			[
-				'get' => $get_result,
-				'update' => $update_result,
-				'names' => [$name, $last_name, $middle_name],
-				'request' =>
-					[
-						'event' => $_REQUEST['event'],
-						'data' => $_REQUEST['data'],
-						'ts' => $_REQUEST['ts'],
-						'auth' => $_REQUEST['auth'],
-					]
-			],
-			true
-		)
-	);
-
 }
-
 
 ?>
