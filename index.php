@@ -89,10 +89,10 @@ if ($status === 'trial' && !empty($expiry)) {
                     </div>
                     <div class="text-end">
                         <?php if ($status === 'expired' || $status === 'inactive'): ?>
-                            <button class="btn btn-warning">Renew/Buy license</button>
+                            <button class="btn btn-warning" onclick="startPayment()">Kup licencję ($29.99/miesiąc)</button>
                         <?php elseif ($status === 'trial'): ?>
                             <button class="btn btn-success" disabled>Trial active</button>
-                            <button class="btn btn-warning ms-2">Buy license</button>
+                            <button class="btn btn-warning ms-2" onclick="startPayment()">Kup licencję ($29.99/miesiąc)</button>
                         <?php elseif ($status === 'pending'): ?>
                             <button class="btn btn-secondary" disabled>Payment pending...</button>
                         <?php else: ?>
@@ -107,5 +107,27 @@ if ($status === 'trial' && !empty($expiry)) {
         </div>
     </div>
 </div>
+<script>
+    async function startPayment() {
+        try {
+            const response = await fetch('create_payment.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                window.location.href = data.url;
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            alert('Error: ' + error.message);
+        }
+    }
+</script>
 </body>
 </html>
