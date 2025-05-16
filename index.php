@@ -5,16 +5,17 @@ require_once(__DIR__.'/crest.php');
 $domain = $_REQUEST['DOMAIN'] ?? ($_SERVER['HTTP_HOST'] ?? '');
 $cosmos = new CosmosDB();
 $settings = $cosmos->getSettings($domain);
+$license = $cosmos->getLicenseStatus($domain);
 
 // Pobierz ustawienia GetResponse
 $apiKey = $settings['getresponse_api_key'] ?? '';
 $listId = $settings['getresponse_list_id'] ?? '';
 
 // License status logic (single status)
-$status = strtolower($settings['license_status'] ?? 'active'); // trial, active, expired, pending, inactive
+$status = strtolower($license['license_status'] ?? 'active'); // trial, active, expired, pending, inactive
 $statusLabel = ucfirst($status);
 $statusBadge = $status === 'active' ? 'success' : ($status === 'trial' ? 'info' : ($status === 'pending' ? 'warning' : 'danger'));
-$expiry = $settings['license_expiry'] ?? '2025-12-31';
+$expiry = $license['license_expiry'] ?? '2025-12-31';
 $connection = $settings['connection_status'] ?? 'Connected';
 $connectionBadge = $connection === 'Connected' ? 'success' : 'danger';
 $daysLeft = null;

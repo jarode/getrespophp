@@ -136,56 +136,111 @@ class CosmosDB
     }
 
     /**
-     * Get settings document from Cosmos DB by domain
-     */
-    public static function getSettings($domain) {
-        $result = self::queryByDomain($domain);
-        if ($result['code'] >= 200 && $result['code'] < 300) {
-            $data = json_decode($result['response'], true);
-            if (isset($data['Documents'][0])) {
-                return $data['Documents'][0];
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Set (insert or update) settings document in Cosmos DB by domain
-     */
-    public static function setSettings($domain, $settingsArray) {
-        // Sprawdź, czy istnieje dokument dla domeny
-        $existing = self::getSettings($domain);
-        if ($existing && isset($existing['id'])) {
-            $settingsArray['id'] = $existing['id'];
-            return self::update($domain, $settingsArray);
-        } else {
-            if (!isset($settingsArray['id'])) {
-                $settingsArray['id'] = uniqid();
-            }
-            $settingsArray['domain'] = $domain;
-            return self::insert($domain, $settingsArray);
-        }
-    }
-
-    /**
-     * Zapisz ustawienia użytkownika
+     * Zapisz ustawienia użytkownika w zunifikowanej strukturze
      * @param string $domain Domena Bitrix24
      * @param array $settings Ustawienia (np. klucz API, lista GetResponse)
      * @return array Wynik operacji
      */
     public static function saveSettings($domain, $settings)
     {
-        // Sprawdź, czy istnieje dokument dla domeny
+        $logType = 'settings';
+        $now = gmdate('c');
+        // Sprawdź, czy istnieje dokument settings dla domeny
         $existing = self::getSettings($domain);
+        $doc = [
+            'domain' => $domain,
+            'log_type' => $logType,
+            'log_data' => $settings,
+            'log_time' => $now,
+            'source' => 'saveSettings',
+        ];
         if ($existing && isset($existing['id'])) {
-            $settings['id'] = $existing['id'];
-            return self::update($domain, $settings);
+            $doc['id'] = $existing['id'];
+            return self::update($domain, $doc);
         } else {
-            if (!isset($settings['id'])) {
-                $settings['id'] = uniqid();
-            }
-            $settings['domain'] = $domain;
-            return self::insert($domain, $settings);
+            $doc['id'] = uniqid();
+            return self::insert($domain, $doc);
         }
+    }
+
+    /**
+     * Pobierz ustawienia użytkownika (log_type = 'settings')
+     * @param string $domain
+     * @return array|null
+     */
+    public static function getSettings($domain)
+    {
+        $result = self::queryByDomain($domain);
+        if ($result['code'] >= 200 && $result['code'] < 300) {
+            $data = json_decode($result['response'], true);
+            if (isset($data['Documents']) && is_array($data['Documents'])) {
+                // Szukaj najnowszego wpisu typu 'settings'
+                $settingsDocs = array_filter($data['Documents'], function($doc) {
+                    return isset($doc['log_type']) && $doc['log_type'] === 'settings';
+                });
+                if (!empty($settingsDocs)) {
+                    // Sortuj po log_time malejąco
+                    usort($settingsDocs, function($a, $b) {
+                        return strcmp($b['log_time'], $a['log_time']);
+                    });
+                    // Zwróć log_data najnowszego wpisu
+                    return $settingsDocs[0]['log_data'] ?? null;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Zapisz status licencji w zunifikowanej strukturze
+     * @param string $domain
+     * @param array $licenseData
+     * @return array
+     */
+    public static function saveLicenseStatus($domain, $licenseData)
+    {
+        $logType = 'license';
+        $now = gmdate('c');
+        $existing = self::getLicenseStatus($domain, true); // true = return full doc
+        $doc = [
+            'domain' => $domain,
+            'log_type' => $logType,
+            'log_data' => $licenseData,
+            'log_time' => $now,
+            'source' => 'saveLicenseStatus',
+        ];
+        if ($existing && isset($existing['id'])) {
+            $doc['id'] = $existing['id'];
+            return self::update($domain, $doc);
+        } else {
+            $doc['id'] = uniqid();
+            return self::insert($domain, $doc);
+        }
+    }
+
+    /**
+     * Pobierz status licencji (log_type = 'license')
+     * @param string $domain
+     * @param bool $fullDoc Jeśli true, zwraca cały dokument, jeśli false tylko log_data
+     * @return array|null
+     */
+    public static function getLicenseStatus($domain, $fullDoc = false)
+    {
+        $result = self::queryByDomain($domain);
+        if ($result['code'] >= 200 && $result['code'] < 300) {
+            $data = json_decode($result['response'], true);
+            if (isset($data['Documents']) && is_array($data['Documents'])) {
+                $licenseDocs = array_filter($data['Documents'], function($doc) {
+                    return isset($doc['log_type']) && $doc['log_type'] === 'license';
+                });
+                if (!empty($licenseDocs)) {
+                    usort($licenseDocs, function($a, $b) {
+                        return strcmp($b['log_time'], $a['log_time']);
+                    });
+                    return $fullDoc ? $licenseDocs[0] : ($licenseDocs[0]['log_data'] ?? null);
+                }
+            }
+        }
+        return null;
     }
 } 

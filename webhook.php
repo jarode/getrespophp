@@ -28,14 +28,13 @@ switch ($event->type) {
         $session = $event->data->object;
         $domain = $session->metadata->domain ?? null;
         if ($domain) {
-            $settings = CosmosDB::getSettings($domain);
-            if ($settings) {
-                $settings['license_status'] = 'active';
-                $settings['license_expiry'] = date('Y-m-d', strtotime('+1 month'));
-                $settings['payment_id'] = $session->payment_intent ?? null;
-                $settings['payment_date'] = date('Y-m-d H:i:s');
-                CosmosDB::update($domain, $settings);
-            }
+            $licenseData = [
+                'license_status' => 'active',
+                'license_expiry' => date('Y-m-d', strtotime('+1 month')),
+                'payment_id' => $session->payment_intent ?? null,
+                'payment_date' => date('Y-m-d H:i:s')
+            ];
+            CosmosDB::saveLicenseStatus($domain, $licenseData);
         }
         break;
     default:
