@@ -1,8 +1,8 @@
 <?php
 require_once(__DIR__.'/crest.php');
 
-// Get domain from request or server
-$domain = $_REQUEST['DOMAIN'] ?? ($_SERVER['HTTP_HOST'] ?? '');
+// Get domain ONLY from request (GET/POST), never from $_SERVER['HTTP_HOST']
+$domain = $_REQUEST['DOMAIN'] ?? '';
 $cosmos = new CosmosDB();
 $license = $cosmos->getLicenseStatus($domain);
 $settings = $cosmos->getSettings($domain);
@@ -234,6 +234,18 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
     const listLoader = document.getElementById('listLoader');
     const listError = document.getElementById('listError');
 
+    // Funkcja do pobierania domeny Bitrix24 z URL (jeśli nie ma w PHP)
+    function getBitrixDomain() {
+        // Najpierw spróbuj z PHP (wygenerowane w kodzie)
+        var phpDomain = "<?php echo htmlspecialchars($domain); ?>";
+        if (phpDomain && phpDomain.length > 0) return phpDomain;
+        // Potem spróbuj z parametrów URL
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('DOMAIN')) return params.get('DOMAIN');
+        // Ostatecznie zwróć pusty string
+        return '';
+    }
+
     async function fetchGRLists(apiKey) {
         listLoader.style.display = 'block';
         listError.textContent = '';
@@ -242,7 +254,7 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
             const response = await fetch('get_gr_lists.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ api_key: apiKey, domain: "<?php echo htmlspecialchars($domain); ?>" })
+                body: JSON.stringify({ api_key: apiKey, domain: getBitrixDomain() })
             });
             const result = await response.json();
             if (result.success && Array.isArray(result.lists)) {
@@ -285,6 +297,7 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
         e.preventDefault();
         const apiKey = apiKeyInput.value;
         const listId = listIdSelect.value;
+        const domain = getBitrixDomain();
         if (!listId) {
             alert('Please select a list.');
             return;
@@ -293,7 +306,7 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                DOMAIN: "<?php echo htmlspecialchars($domain); ?>",
+                DOMAIN: domain,
                 getresponse_api_key: apiKey,
                 getresponse_list_id: listId
             })
@@ -318,7 +331,7 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    DOMAIN: "<?php echo htmlspecialchars($domain); ?>"
+                    DOMAIN: getBitrixDomain()
                 })
             });
             const result = await response.json();
