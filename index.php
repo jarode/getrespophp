@@ -49,6 +49,10 @@ if ($configStatus === 'success') {
     $message = 'Wystąpił błąd podczas zapisywania ustawień.';
     $messageType = 'danger';
 }
+
+$canConfig = in_array($status, ['trial', 'active']);
+$canSync = in_array($status, ['trial', 'active']);
+$canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -78,13 +82,13 @@ if ($configStatus === 'success') {
                             <button class="nav-link active" id="dashboard-tab" data-bs-toggle="tab" data-bs-target="#dashboard" type="button" role="tab" aria-controls="dashboard" aria-selected="true">Dashboard</button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab" aria-controls="config" aria-selected="false">Konfiguracja</button>
+                            <button class="nav-link<?php if (!$canConfig) echo ' disabled'; ?>" id="config-tab" data-bs-toggle="tab" data-bs-target="#config" type="button" role="tab" aria-controls="config" aria-selected="false">Configuration</button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="sync-tab" data-bs-toggle="tab" data-bs-target="#sync" type="button" role="tab" aria-controls="sync" aria-selected="false">Synchronizacja</button>
+                            <button class="nav-link<?php if (!$canSync) echo ' disabled'; ?>" id="sync-tab" data-bs-toggle="tab" data-bs-target="#sync" type="button" role="tab" aria-controls="sync" aria-selected="false">Synchronization</button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button class="nav-link" id="help-tab" data-bs-toggle="tab" data-bs-target="#help" type="button" role="tab" aria-controls="help" aria-selected="false">Pomoc</button>
+                            <button class="nav-link" id="help-tab" data-bs-toggle="tab" data-bs-target="#help" type="button" role="tab" aria-controls="help" aria-selected="false">Help</button>
                         </li>
                     </ul>
                     <div class="tab-content" id="myTabContent">
@@ -137,15 +141,13 @@ if ($configStatus === 'success') {
                                 </div>
                             </div>
                             <div class="text-end">
-                                <?php if ($status === 'expired' || $status === 'inactive'): ?>
-                                    <button class="btn btn-warning" onclick="startPayment()">Kup licencję ($29.99/miesiąc)</button>
-                                <?php elseif ($status === 'trial'): ?>
-                                    <button class="btn btn-success" disabled>Trial active</button>
-                                    <button class="btn btn-warning ms-2" onclick="startPayment()">Kup licencję ($29.99/miesiąc)</button>
-                                <?php elseif ($status === 'pending'): ?>
-                                    <button class="btn btn-secondary" disabled>Payment pending...</button>
-                                <?php else: ?>
-                                    <button class="btn btn-outline-primary" disabled>License active</button>
+                                <?php if ($canPay): ?>
+                                    <button class="btn btn-warning" onclick="startPayment()">Buy license (29.99 PLN/month)</button>
+                                <?php endif; ?>
+                                <?php if ($status === 'trial'): ?>
+                                    <button class="btn btn-success ms-2" disabled>Trial active</button>
+                                <?php elseif ($status === 'active'): ?>
+                                    <button class="btn btn-outline-primary ms-2" disabled>License active</button>
                                 <?php endif; ?>
                             </div>
                             <?php if ($status === 'expired' || $status === 'inactive' || $status === 'pending'): ?>
@@ -153,20 +155,31 @@ if ($configStatus === 'success') {
                             <?php endif; ?>
                         </div>
                         <div class="tab-pane fade" id="config" role="tabpanel" aria-labelledby="config-tab">
-                            <form id="configForm">
-                                <div class="mb-3">
-                                    <label for="apiKey" class="form-label">GetResponse API Key:</label>
-                                    <input type="text" class="form-control" id="apiKey" name="apiKey" value="<?php echo htmlspecialchars($apiKey); ?>" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="listId" class="form-label">GetResponse List ID:</label>
-                                    <input type="text" class="form-control" id="listId" name="listId" value="<?php echo htmlspecialchars($listId); ?>" required>
-                                </div>
-                                <button type="submit" class="btn btn-primary">Zapisz ustawienia</button>
-                            </form>
+                            <?php if ($canConfig): ?>
+                                <form id="configForm">
+                                    <div class="mb-3">
+                                        <label for="apiKey" class="form-label">GetResponse API Key:</label>
+                                        <input type="text" class="form-control" id="apiKey" name="apiKey" value="<?php echo htmlspecialchars($apiKey); ?>" required>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="listId" class="form-label">GetResponse List ID:</label>
+                                        <input type="text" class="form-control" id="listId" name="listId" value="<?php echo htmlspecialchars($listId); ?>" required>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">Save settings</button>
+                                </form>
+                            <?php else: ?>
+                                <div class="alert alert-warning mt-3">Configuration is available only with an active license or during the trial period.</div>
+                            <?php endif; ?>
                         </div>
                         <div class="tab-pane fade" id="sync" role="tabpanel" aria-labelledby="sync-tab">
-                            <button id="startSync" class="btn btn-success">Rozpocznij synchronizację</button>
+                            <?php if ($canSync): ?>
+                                <button id="startSync" class="btn btn-success">Start synchronization</button>
+                                <?php if ($status === 'trial'): ?>
+                                    <div class="alert alert-info mt-2">Trial version: limit of 20 contacts.</div>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <div class="alert alert-warning mt-3">Synchronization is available only with an active license or during the trial period.</div>
+                            <?php endif; ?>
                         </div>
                         <div class="tab-pane fade" id="help" role="tabpanel" aria-labelledby="help-tab">
                             <h5>Instrukcje:</h5>
@@ -230,32 +243,62 @@ if ($configStatus === 'success') {
         }
     });
 
-    // Obsługa zapisu konfiguracji
-    document.getElementById('configForm').onsubmit = async function(e) {
-        e.preventDefault();
-        const apiKey = document.getElementById('apiKey').value;
-        const listId = document.getElementById('listId').value;
-        const response = await fetch('save_settings.php', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                DOMAIN: "<?php echo htmlspecialchars($domain); ?>",
-                getresponse_api_key: apiKey,
-                getresponse_list_id: listId
-            })
-        });
-        const result = await response.json();
-        if (result.success) {
-            window.location.href = window.location.pathname + '?config=success';
-        } else {
-            window.location.href = window.location.pathname + '?config=error';
-        }
-    };
+    // License status for JS logic
+    const licenseStatus = "<?php echo $status; ?>";
 
-    // Obsługa synchronizacji (przykładowa logika)
-    document.getElementById('startSync').onclick = function() {
-        alert('Synchronizacja zostanie uruchomiona (tu podłącz backend do synchronizacji).');
-    };
+    // Disable config form if not allowed
+    if (!['trial', 'active'].includes(licenseStatus)) {
+        const configForm = document.getElementById('configForm');
+        if (configForm) {
+            configForm.onsubmit = function(e) {
+                e.preventDefault();
+                alert('Settings can only be changed with an active license or during the trial period.');
+                return false;
+            };
+            // Optionally disable inputs
+            Array.from(configForm.elements).forEach(el => el.disabled = true);
+        }
+    } else {
+        document.getElementById('configForm').onsubmit = async function(e) {
+            e.preventDefault();
+            const apiKey = document.getElementById('apiKey').value;
+            const listId = document.getElementById('listId').value;
+            const response = await fetch('save_settings.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    DOMAIN: "<?php echo htmlspecialchars($domain); ?>",
+                    getresponse_api_key: apiKey,
+                    getresponse_list_id: listId
+                })
+            });
+            const result = await response.json();
+            if (result.success) {
+                window.location.href = window.location.pathname + '?config=success';
+            } else {
+                alert(result.error || 'Error saving settings.');
+            }
+        };
+    }
+
+    // Synchronization tab protection
+    if (!['trial', 'active'].includes(licenseStatus)) {
+        const syncBtn = document.getElementById('startSync');
+        if (syncBtn) {
+            syncBtn.onclick = function() {
+                alert('Synchronization is available only with an active license or during the trial period.');
+                return false;
+            };
+            syncBtn.disabled = true;
+        }
+    } else {
+        const syncBtn = document.getElementById('startSync');
+        if (syncBtn) {
+            syncBtn.onclick = function() {
+                alert('Synchronization will be started (connect backend here).');
+            };
+        }
+    }
 </script>
 </body>
 </html>

@@ -29,6 +29,13 @@ if (empty($data['DOMAIN']) || empty($data['getresponse_api_key']) || empty($data
 try {
     // Zapisz ustawienia w CosmosDB
     $cosmos = new CosmosDB();
+    $license = $cosmos->getLicenseStatus($data['DOMAIN']);
+    $status = strtolower($license['license_status'] ?? 'trial');
+    if (!in_array($status, ['trial', 'active'])) {
+        http_response_code(403);
+        echo json_encode(['success' => false, 'error' => 'Settings can only be changed with an active license or during the trial period.']);
+        exit;
+    }
     $result = $cosmos->saveSettings($data['DOMAIN'], [
         'getresponse_api_key' => $data['getresponse_api_key'],
         'getresponse_list_id' => $data['getresponse_list_id']
