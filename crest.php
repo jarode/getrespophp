@@ -84,13 +84,26 @@ class CRest
 
 				// Zapisz do Cosmos DB
 				CosmosDB::update($domain, $cosmosData);
-			}
 		} catch (Exception $e) {
 			static::setLog([
 				'error' => 'cosmos_db_install_log_failed',
 				'message' => $e->getMessage(),
 				'stack' => $e->getTraceAsString()
 			], 'cosmos_fallback');
+		}
+
+		// Po udanej instalacji, pobierz app_id przez API i zapisz do CosmosDB
+		if ($result['install']) {
+			$appInfo = static::call('app.info');
+			$appId = $appInfo['result']['ID'] ?? '';
+			if ($appId) {
+				$domain = $settings['domain'];
+				$settingsDb = CosmosDB::getSettings($domain);
+				if ($settingsDb) {
+					$settingsDb['app_id'] = $appId;
+					CosmosDB::update($domain, $settingsDb);
+				}
+			}
 		}
 
 		static::setLog(
