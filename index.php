@@ -120,7 +120,7 @@ if ($status === 'trial' && !empty($expiry)) {
             const data = await response.json();
             
             if (data.success) {
-                window.location.href = data.url;
+                window.open(data.url, '_blank');
             } else {
                 alert('Error: ' + data.error);
             }
