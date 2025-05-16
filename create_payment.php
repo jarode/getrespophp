@@ -15,16 +15,16 @@ $stripe = new \Stripe\StripeClient('sk_test_51RP8JHPCW5Rb7LaJuEMR6gEUKKOVoEyBZzM
 try {
     // Create checkout session
     $checkout_session = $stripe->checkout->sessions->create([
-        'success_url' => "https://$domain/bitrix/admin/getrespophp_success.php?session_id={CHECKOUT_SESSION_ID}",
-        'cancel_url' => "https://$domain/bitrix/admin/getrespophp_cancel.php",
+        'success_url' => "https://$domain/success.php?session_id={CHECKOUT_SESSION_ID}",
+        'cancel_url' => "https://$domain/cancel.php",
         'payment_method_types' => ['card'],
         'line_items' => [[
             'price_data' => [
-                'currency' => 'usd',
+                'currency' => 'pln',
                 'product_data' => [
-                    'name' => 'Bitrix24 Integration - 1 Month',
+                    'name' => 'Bitrix24 Integration - 1 Year',
                 ],
-                'unit_amount' => 2999, // $29.99
+                'unit_amount' => 50000, // 500 PLN
             ],
             'quantity' => 1,
         ]],
