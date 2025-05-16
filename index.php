@@ -110,12 +110,19 @@ if ($status === 'trial' && !empty($expiry)) {
 <script>
     async function startPayment() {
         try {
+            // Pobierz APP_ID z adresu URL (ostatni segment po /)
+            const pathParts = window.location.pathname.split('/').filter(Boolean);
+            let appId = '';
+            const appIdx = pathParts.indexOf('app');
+            if (appIdx !== -1 && pathParts.length > appIdx + 1) {
+                appId = pathParts[appIdx + 1];
+            }
             const response = await fetch('create_payment.php', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ DOMAIN: "<?php echo htmlspecialchars($domain); ?>" })
+                body: JSON.stringify({ DOMAIN: "<?php echo htmlspecialchars($domain); ?>", APP_ID: appId })
             });
             const data = await response.json();
             if (data.success) {

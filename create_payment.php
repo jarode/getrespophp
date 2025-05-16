@@ -3,11 +3,12 @@
 require_once(__DIR__.'/vendor/autoload.php');
 require_once(__DIR__.'/crest.php');
 
-// Get domain from JSON POST
+// Get domain and app_id from JSON POST
 $data = json_decode(file_get_contents('php://input'), true);
 $domain = $data['DOMAIN'] ?? '';
-if (empty($domain)) {
-    die(json_encode(['success' => false, 'error' => 'Domain is required']));
+$appId = $data['APP_ID'] ?? '';
+if (empty($domain) || empty($appId)) {
+    die(json_encode(['success' => false, 'error' => 'Domain and App ID are required']));
 }
 
 // Testowy klucz Stripe
@@ -16,8 +17,8 @@ $stripe = new \Stripe\StripeClient('sk_test_51RP8JHPCW5Rb7LaJuEMR6gEUKKOVoEyBZzM
 try {
     // Create checkout session
     $checkout_session = $stripe->checkout->sessions->create([
-        'success_url' => "https://$domain/success.php?session_id={CHECKOUT_SESSION_ID}",
-        'cancel_url' => "https://$domain/cancel.php",
+        'success_url' => "https://$domain/marketplace/app/$appId/?payment=success",
+        'cancel_url' => "https://$domain/marketplace/app/$appId/?payment=cancel",
         'payment_method_types' => ['card'],
         'line_items' => [[
             'price_data' => [
