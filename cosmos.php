@@ -166,4 +166,26 @@ class CosmosDB
             return self::insert($domain, $settingsArray);
         }
     }
+
+    /**
+     * Zapisz ustawienia użytkownika
+     * @param string $domain Domena Bitrix24
+     * @param array $settings Ustawienia (np. klucz API, lista GetResponse)
+     * @return array Wynik operacji
+     */
+    public static function saveSettings($domain, $settings)
+    {
+        // Sprawdź, czy istnieje dokument dla domeny
+        $existing = self::getSettings($domain);
+        if ($existing && isset($existing['id'])) {
+            $settings['id'] = $existing['id'];
+            return self::update($domain, $settings);
+        } else {
+            if (!isset($settings['id'])) {
+                $settings['id'] = uniqid();
+            }
+            $settings['domain'] = $domain;
+            return self::insert($domain, $settings);
+        }
+    }
 } 
