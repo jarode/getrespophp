@@ -4,20 +4,23 @@ require_once(__DIR__.'/crest.php');
 // Get domain from request or server
 $domain = $_REQUEST['DOMAIN'] ?? ($_SERVER['HTTP_HOST'] ?? '');
 $cosmos = new CosmosDB();
-$settings = $cosmos->getSettings($domain);
 $license = $cosmos->getLicenseStatus($domain);
+$settings = $cosmos->getSettings($domain);
 
-// Pobierz ustawienia GetResponse
+if ($license && isset($license['license_status'])) {
+    $status = strtolower($license['license_status']);
+    $expiry = $license['license_expiry'] ?? '2025-12-31';
+} else {
+    $status = strtolower($settings['license_status'] ?? 'trial');
+    $expiry = $settings['license_expiry'] ?? '2025-12-31';
+}
+
 $apiKey = $settings['getresponse_api_key'] ?? '';
 $listId = $settings['getresponse_list_id'] ?? '';
-
-// License status logic (single status)
-$status = strtolower($license['license_status'] ?? 'active'); // trial, active, expired, pending, inactive
-$statusLabel = ucfirst($status);
-$statusBadge = $status === 'active' ? 'success' : ($status === 'trial' ? 'info' : ($status === 'pending' ? 'warning' : 'danger'));
-$expiry = $license['license_expiry'] ?? '2025-12-31';
 $connection = $settings['connection_status'] ?? 'Connected';
 $connectionBadge = $connection === 'Connected' ? 'success' : 'danger';
+$statusLabel = ucfirst($status);
+$statusBadge = $status === 'active' ? 'success' : ($status === 'trial' ? 'info' : ($status === 'pending' ? 'warning' : 'danger'));
 $daysLeft = null;
 if ($status === 'trial' && !empty($expiry)) {
     $daysLeft = (strtotime($expiry) - strtotime('today')) / 86400;

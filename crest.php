@@ -56,6 +56,12 @@ class CRest
 				$settings['license_status'] = 'trial';
 				$settings['license_expiry'] = date('Y-m-d', strtotime('+14 days'));
 				$settings['subscription_type'] = 'trial';
+				// Dodaj wpis license (trial) w zunifikowanej strukturze
+				CosmosDB::saveLicenseStatus($settings['domain'], [
+					'license_status' => 'trial',
+					'license_expiry' => $settings['license_expiry'],
+					'subscription_type' => 'trial'
+				]);
 			} else {
 				// Zachowaj istniejące pola licencyjne
 				$settings['license_status'] = $existing['license_status'];
