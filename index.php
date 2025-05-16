@@ -134,6 +134,28 @@ if ($status === 'trial' && !empty($expiry)) {
             alert('Error: ' + error.message);
         }
     }
+
+    document.addEventListener('DOMContentLoaded', function() {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('payment') === 'success') {
+            showPaymentBanner('Payment successful! Your license is now active.', 'success');
+        } else if (params.get('payment') === 'cancel') {
+            showPaymentBanner('Payment was cancelled. You can try again anytime.', 'warning');
+        }
+
+        function showPaymentBanner(message, type) {
+            const banner = document.createElement('div');
+            banner.className = 'alert alert-' + type + ' text-center';
+            banner.style.position = 'fixed';
+            banner.style.top = '0';
+            banner.style.left = '0';
+            banner.style.width = '100%';
+            banner.style.zIndex = '9999';
+            banner.innerText = message;
+            document.body.appendChild(banner);
+            setTimeout(() => banner.remove(), 6000);
+        }
+    });
 </script>
 </body>
 </html>
