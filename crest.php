@@ -565,7 +565,7 @@ class CRest
 	{
 		$domain = $arSettings['domain'] ?? ($_REQUEST['DOMAIN'] ?? ($_SERVER['HTTP_HOST'] ?? null));
 		if ($domain) {
-			$result = CosmosDB::setSettings($domain, $arSettings);
+			$result = CosmosDB::saveSettings($domain, $arSettings);
 			return ($result && isset($result['code']) && $result['code'] >= 200 && $result['code'] < 300);
 		}
 		return false;
