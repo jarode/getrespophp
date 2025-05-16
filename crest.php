@@ -84,6 +84,7 @@ class CRest
 
 				// Zapisz do Cosmos DB
 				CosmosDB::update($domain, $cosmosData);
+			}
 		} catch (Exception $e) {
 			static::setLog([
 				'error' => 'cosmos_db_install_log_failed',
@@ -92,7 +93,7 @@ class CRest
 			], 'cosmos_fallback');
 		}
 
-		// Po udanej instalacji, pobierz app_id przez API i zapisz do CosmosDB
+		// Po try/catch: pobierz app_id przez API i zapisz do CosmosDB
 		if ($result['install']) {
 			$appInfo = static::call('app.info');
 			$appId = $appInfo['result']['ID'] ?? '';
