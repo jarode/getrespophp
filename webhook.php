@@ -2,8 +2,8 @@
 require_once(__DIR__.'/vendor/autoload.php');
 require_once(__DIR__.'/cosmos.php');
 
-// Stripe webhook secret z ENV
-$endpoint_secret = getenv('STRIPE_WEBHOOK_SECRET');
+// Testowy webhook secret Stripe
+$endpoint_secret = 'whsec_rkFvtV0zCJ4nZDrl04h5EIl55TYk6At9';
 
 $payload = @file_get_contents('php://input');
 $sig_header = $_SERVER['HTTP_STRIPE_SIGNATURE'] ?? '';

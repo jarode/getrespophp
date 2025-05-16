@@ -9,8 +9,8 @@ if (empty($domain)) {
     die(json_encode(['success' => false, 'error' => 'Domain is required']));
 }
 
-// Initialize Stripe
-$stripe = new \Stripe\StripeClient(getenv('STRIPE_SECRET_KEY'));
+// Testowy klucz Stripe
+$stripe = new \Stripe\StripeClient('sk_test_51RP8JHPCW5Rb7LaJuEMR6gEUKKOVoEyBZzM5n4qj3ZX4C06NP5nMIFVXYTorJHJx8Ji3xlc3djHFpWblYZ0ZWhl800y6kkd9di');
 
 try {
     // Create checkout session
