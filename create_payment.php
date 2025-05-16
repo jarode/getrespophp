@@ -14,19 +14,19 @@ if (empty($domain)) {
 $settings = CosmosDB::getSettings($domain);
 $appId = $settings['app_id'] ?? '';
 
-if (empty($appId)) {
+if ($appId === '' || $appId === null) {
     // Try to fetch from Bitrix24 API and save to CosmosDB
     $appInfo = CRest::call('app.info');
     // Log response for debugging
     file_put_contents(__DIR__.'/appinfo_debug.log', print_r($appInfo, true), FILE_APPEND);
     $appId = $appInfo['result']['ID'] ?? '';
-    if (!empty($appId)) {
+    if ($appId !== '' && $appId !== null) {
         $settings['app_id'] = $appId;
         CosmosDB::saveSettings($domain, $settings);
     }
 }
 
-if (empty($appId)) {
+if ($appId === '' || $appId === null) {
     die(json_encode(['success' => false, 'error' => 'App ID not found for this domain']));
 }
 
