@@ -11,6 +11,11 @@ if (empty($domain) || empty($appId)) {
     die(json_encode(['success' => false, 'error' => 'Domain and App ID are required']));
 }
 
+// Save APP_ID to settings in CosmosDB
+$settings = CosmosDB::getSettings($domain) ?: [];
+$settings['app_id'] = $appId;
+CosmosDB::saveSettings($domain, $settings);
+
 // Pobierz app_id z CosmosDB
 $settings = CosmosDB::getSettings($domain);
 $appId = $settings['app_id'] ?? '';
