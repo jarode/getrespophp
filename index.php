@@ -17,11 +17,12 @@ if ($license && isset($license['license_status'])) {
 
 $apiKey = $settings['getresponse_api_key'] ?? '';
 $listId = $settings['getresponse_list_id'] ?? '';
-$connection = $settings['connection_status'] ?? 'Connected';
+$connection = $settings['connection_status'] ?? 'Unknown';
 $connectionBadge = $connection === 'Connected' ? 'success' : 'danger';
 $statusLabel = ucfirst($status);
 $statusBadge = $status === 'active' ? 'success' : ($status === 'trial' ? 'info' : ($status === 'pending' ? 'warning' : 'danger'));
 $daysLeft = null;
+$today = date('Y-m-d');
 if ($status === 'trial' && !empty($expiry)) {
     $daysLeft = (strtotime($expiry) - strtotime('today')) / 86400;
     $daysLeft = max(0, (int)$daysLeft);
@@ -50,9 +51,11 @@ if ($configStatus === 'success') {
     $messageType = 'danger';
 }
 
-$canConfig = in_array($status, ['trial', 'active']);
-$canSync = in_array($status, ['trial', 'active']);
-$canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']);
+// Licencja ważna tylko jeśli status trial/active i data >= dziś
+$licenseValid = in_array($status, ['trial', 'active']) && ($expiry >= $today);
+$canConfig = $licenseValid;
+$canSync = $licenseValid;
+$canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($expiry < $today);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -107,7 +110,7 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']);
                             </div>
                             <?php if ($status === 'trial'): ?>
                                 <div class="alert alert-info">Your free trial is active. <?php echo $daysLeft; ?> day(s) left.</div>
-                            <?php elseif ($status === 'expired' || $status === 'inactive'): ?>
+                            <?php elseif ($status === 'expired' || $status === 'inactive' || $expiry < $today): ?>
                                 <div class="alert alert-danger">Your license has expired or is inactive. Please renew to continue using the integration.</div>
                             <?php elseif ($status === 'pending'): ?>
                                 <div class="alert alert-warning">Your payment is being processed. Please wait or contact support if this takes too long.</div>
@@ -118,22 +121,6 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']);
                                     <span><?php echo htmlspecialchars($expiry); ?></span>
                                 </div>
                             </div>
-                            <hr>
-                            <h5>GetResponse Settings</h5>
-                            <div class="mb-3 row">
-                                <label class="col-sm-4 col-form-label">API Key:</label>
-                                <div class="col-sm-8 pt-2">
-                                    <input type="password" class="form-control-plaintext d-inline w-auto" value="<?php echo htmlspecialchars($apiKey); ?>" readonly>
-                                    <button class="btn btn-sm btn-outline-secondary ms-2" disabled>Change</button>
-                                </div>
-                            </div>
-                            <div class="mb-3 row">
-                                <label class="col-sm-4 col-form-label">List (campaign ID):</label>
-                                <div class="col-sm-8 pt-2">
-                                    <input type="text" class="form-control-plaintext d-inline w-auto" value="<?php echo htmlspecialchars($listId); ?>" readonly>
-                                </div>
-                            </div>
-                            <hr>
                             <div class="mb-3 row">
                                 <label class="col-sm-4 col-form-label">Connection status:</label>
                                 <div class="col-sm-8 pt-2">
@@ -150,7 +137,7 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']);
                                     <button class="btn btn-outline-primary ms-2" disabled>License active</button>
                                 <?php endif; ?>
                             </div>
-                            <?php if ($status === 'expired' || $status === 'inactive' || $status === 'pending'): ?>
+                            <?php if (!$licenseValid): ?>
                                 <div class="alert alert-warning mt-4">Integration features are disabled until your license is active.</div>
                             <?php endif; ?>
                         </div>
@@ -162,13 +149,34 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']);
                                         <input type="text" class="form-control" id="apiKey" name="apiKey" value="<?php echo htmlspecialchars($apiKey); ?>" required>
                                     </div>
                                     <div class="mb-3">
-                                        <label for="listId" class="form-label">GetResponse List ID:</label>
-                                        <input type="text" class="form-control" id="listId" name="listId" value="<?php echo htmlspecialchars($listId); ?>" required>
+                                        <label for="listId" class="form-label">GetResponse List:</label>
+                                        <select class="form-control" id="listId" name="listId" required>
+                                            <option value="">-- Select list --</option>
+                                        </select>
+                                        <div id="listLoader" style="display:none;" class="form-text">Loading lists...</div>
+                                        <div id="listError" class="text-danger small"></div>
                                     </div>
                                     <button type="submit" class="btn btn-primary">Save settings</button>
                                 </form>
+                                <div class="mt-3">
+                                    <span class="badge bg-<?php echo $connectionBadge; ?>">Connection: <?php echo htmlspecialchars($connection); ?></span>
+                                </div>
                             <?php else: ?>
                                 <div class="alert alert-warning mt-3">Configuration is available only with an active license or during the trial period.</div>
+                                <form>
+                                    <div class="mb-3">
+                                        <label for="apiKey" class="form-label">GetResponse API Key:</label>
+                                        <input type="text" class="form-control" id="apiKey" name="apiKey" value="<?php echo htmlspecialchars($apiKey); ?>" disabled>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="listId" class="form-label">GetResponse List ID:</label>
+                                        <input type="text" class="form-control" id="listId" name="listId" value="<?php echo htmlspecialchars($listId); ?>" disabled>
+                                    </div>
+                                    <button type="button" class="btn btn-primary" disabled>Save settings</button>
+                                </form>
+                                <div class="mt-3">
+                                    <span class="badge bg-<?php echo $connectionBadge; ?>">Connection: <?php echo htmlspecialchars($connection); ?></span>
+                                </div>
                             <?php endif; ?>
                         </div>
                         <div class="tab-pane fade" id="sync" role="tabpanel" aria-labelledby="sync-tab">
@@ -179,12 +187,16 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']);
                                 <?php endif; ?>
                             <?php else: ?>
                                 <div class="alert alert-warning mt-3">Synchronization is available only with an active license or during the trial period.</div>
+                                <button class="btn btn-success" disabled>Start synchronization</button>
                             <?php endif; ?>
                         </div>
                         <div class="tab-pane fade" id="help" role="tabpanel" aria-labelledby="help-tab">
                             <h5>Instrukcje:</h5>
-                            <p>1. Wprowadź klucz API GetResponse i ID listy w zakładce "Konfiguracja".</p>
-                            <p>2. Użyj przycisku "Rozpocznij synchronizację" w zakładce "Synchronizacja".</p>
+                            <ol>
+                                <li>Wprowadź klucz API GetResponse i ID listy w zakładce <b>Configuration</b> (dostępne tylko z aktywną licencją lub w okresie trial).</li>
+                                <li>Użyj przycisku <b>Start synchronization</b> w zakładce <b>Synchronization</b> (dostępne tylko z aktywną licencją lub w okresie trial).</li>
+                                <li>W razie problemów z płatnością lub licencją, skontaktuj się z supportem.</li>
+                            </ol>
                         </div>
                     </div>
                 </div>
@@ -196,109 +208,130 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']);
 <script>
     async function startPayment() {
         try {
-            // Pobierz APP_ID z adresu URL (ostatni segment po /)
-            const pathParts = window.location.pathname.split('/').filter(Boolean);
-            let appId = '';
-            const appIdx = pathParts.indexOf('app');
-            if (appIdx !== -1 && pathParts.length > appIdx + 1) {
-                appId = pathParts[appIdx + 1];
-            }
             const response = await fetch('create_payment.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ DOMAIN: "<?php echo htmlspecialchars($domain); ?>", APP_ID: appId })
-            });
-            const data = await response.json();
-            if (data.success) {
-                window.open(data.url, '_blank');
-            } else {
-                alert('Error: ' + data.error);
-            }
-        } catch (error) {
-            alert('Error: ' + error.message);
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        const params = new URLSearchParams(window.location.search);
-        if (params.get('payment') === 'success') {
-            showPaymentBanner('Payment successful! Your license is now active.', 'success');
-        } else if (params.get('payment') === 'cancel') {
-            showPaymentBanner('Payment was cancelled. You can try again anytime.', 'warning');
-        }
-
-        function showPaymentBanner(message, type) {
-            const banner = document.createElement('div');
-            banner.className = 'alert alert-' + type + ' text-center';
-            banner.style.position = 'fixed';
-            banner.style.top = '0';
-            banner.style.left = '0';
-            banner.style.width = '100%';
-            banner.style.zIndex = '9999';
-            banner.innerText = message;
-            document.body.appendChild(banner);
-            setTimeout(() => banner.remove(), 6000);
-        }
-    });
-
-    // License status for JS logic
-    const licenseStatus = "<?php echo $status; ?>";
-
-    // Disable config form if not allowed
-    if (!['trial', 'active'].includes(licenseStatus)) {
-        const configForm = document.getElementById('configForm');
-        if (configForm) {
-            configForm.onsubmit = function(e) {
-                e.preventDefault();
-                alert('Settings can only be changed with an active license or during the trial period.');
-                return false;
-            };
-            // Optionally disable inputs
-            Array.from(configForm.elements).forEach(el => el.disabled = true);
-        }
-    } else {
-        document.getElementById('configForm').onsubmit = async function(e) {
-            e.preventDefault();
-            const apiKey = document.getElementById('apiKey').value;
-            const listId = document.getElementById('listId').value;
-            const response = await fetch('save_settings.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    DOMAIN: "<?php echo htmlspecialchars($domain); ?>",
-                    getresponse_api_key: apiKey,
-                    getresponse_list_id: listId
+                    DOMAIN: "<?php echo htmlspecialchars($domain); ?>"
+                })
+            });
+            const result = await response.json();
+            if (result.success && result.url) {
+                window.open(result.url, '_blank');
+            } else {
+                alert(result.error || 'Payment error.');
+            }
+        } catch (e) {
+            alert('Payment error.');
+        }
+    }
+
+    // Konfiguracja formularza
+    <?php if ($canConfig): ?>
+    // Automatyczne pobieranie list po wpisaniu API Key
+    const apiKeyInput = document.getElementById('apiKey');
+    const listIdSelect = document.getElementById('listId');
+    const listLoader = document.getElementById('listLoader');
+    const listError = document.getElementById('listError');
+
+    async function fetchGRLists(apiKey) {
+        listLoader.style.display = 'block';
+        listError.textContent = '';
+        listIdSelect.innerHTML = '<option value="">-- Select list --</option>';
+        try {
+            const response = await fetch('get_gr_lists.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ api_key: apiKey, domain: "<?php echo htmlspecialchars($domain); ?>" })
+            });
+            const result = await response.json();
+            if (result.success && Array.isArray(result.lists)) {
+                result.lists.forEach(list => {
+                    const opt = document.createElement('option');
+                    opt.value = list.id;
+                    opt.textContent = list.name + ' (' + list.id + ')';
+                    listIdSelect.appendChild(opt);
+                });
+            } else {
+                listError.textContent = result.error || 'No lists found.';
+            }
+        } catch (e) {
+            listError.textContent = 'Error fetching lists.';
+        }
+        listLoader.style.display = 'none';
+    }
+
+    apiKeyInput.addEventListener('blur', function() {
+        const apiKey = apiKeyInput.value.trim();
+        if (apiKey.length > 0) {
+            fetchGRLists(apiKey);
+        }
+    });
+
+    // Jeśli jest już API Key i List ID, pobierz listy i ustaw wybraną
+    window.addEventListener('DOMContentLoaded', function() {
+        const apiKey = apiKeyInput.value.trim();
+        const currentListId = "<?php echo htmlspecialchars($listId); ?>";
+        if (apiKey.length > 0) {
+            fetchGRLists(apiKey).then(() => {
+                if (currentListId) {
+                    listIdSelect.value = currentListId;
+                }
+            });
+        }
+    });
+
+    document.getElementById('configForm').onsubmit = async function(e) {
+        e.preventDefault();
+        const apiKey = apiKeyInput.value;
+        const listId = listIdSelect.value;
+        if (!listId) {
+            alert('Please select a list.');
+            return;
+        }
+        const response = await fetch('save_settings.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                DOMAIN: "<?php echo htmlspecialchars($domain); ?>",
+                getresponse_api_key: apiKey,
+                getresponse_list_id: listId
+            })
+        });
+        const result = await response.json();
+        if (result.success) {
+            window.location.href = window.location.pathname + '?config=success';
+        } else {
+            alert(result.error || 'Error saving settings.');
+        }
+    };
+    <?php endif; ?>
+
+    // Synchronizacja
+    <?php if ($canSync): ?>
+    const syncBtn = document.getElementById('startSync');
+    if (syncBtn) {
+        syncBtn.onclick = async function() {
+            syncBtn.disabled = true;
+            syncBtn.textContent = 'Synchronizing...';
+            const response = await fetch('sync.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    DOMAIN: "<?php echo htmlspecialchars($domain); ?>"
                 })
             });
             const result = await response.json();
             if (result.success) {
-                window.location.href = window.location.pathname + '?config=success';
+                alert(result.message || 'Synchronization completed.');
             } else {
-                alert(result.error || 'Error saving settings.');
+                alert(result.error || 'Synchronization error.');
             }
+            syncBtn.disabled = false;
+            syncBtn.textContent = 'Start synchronization';
         };
     }
-
-    // Synchronization tab protection
-    if (!['trial', 'active'].includes(licenseStatus)) {
-        const syncBtn = document.getElementById('startSync');
-        if (syncBtn) {
-            syncBtn.onclick = function() {
-                alert('Synchronization is available only with an active license or during the trial period.');
-                return false;
-            };
-            syncBtn.disabled = true;
-        }
-    } else {
-        const syncBtn = document.getElementById('startSync');
-        if (syncBtn) {
-            syncBtn.onclick = function() {
-                alert('Synchronization will be started (connect backend here).');
-            };
-        }
-    }
+    <?php endif; ?>
 </script>
 </body>
 </html>
