@@ -3,6 +3,10 @@ require_once(__DIR__.'/crest.php');
 
 // Get domain ONLY from request (GET/POST), never from $_SERVER['HTTP_HOST']
 $domain = $_REQUEST['DOMAIN'] ?? '';
+if (empty($domain)) {
+    echo '<div style="margin:2em auto;max-width:600px;text-align:center;color:red;font-weight:bold;">Błąd: Brak domeny Bitrix24 w adresie URL. Uruchom panel z poziomu Bitrix24 lub skontaktuj się z administratorem.</div>';
+    exit;
+}
 $cosmos = new CosmosDB();
 $license = $cosmos->getLicenseStatus($domain);
 $settings = $cosmos->getSettings($domain);
@@ -313,7 +317,7 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
         });
         const result = await response.json();
         if (result.success) {
-            window.location.href = window.location.pathname + '?config=success';
+            window.location.href = window.location.pathname + '?DOMAIN=' + encodeURIComponent(domain) + '&config=success';
         } else {
             alert(result.error || 'Error saving settings.');
         }
