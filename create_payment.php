@@ -3,8 +3,9 @@
 require_once(__DIR__.'/vendor/autoload.php');
 require_once(__DIR__.'/crest.php');
 
-// Get domain from request
-$domain = $_REQUEST['DOMAIN'] ?? ($_SERVER['HTTP_HOST'] ?? '');
+// Get domain from JSON POST
+$data = json_decode(file_get_contents('php://input'), true);
+$domain = $data['DOMAIN'] ?? '';
 if (empty($domain)) {
     die(json_encode(['success' => false, 'error' => 'Domain is required']));
 }

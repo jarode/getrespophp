@@ -114,11 +114,10 @@ if ($status === 'trial' && !empty($expiry)) {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                }
+                },
+                body: JSON.stringify({ DOMAIN: "<?php echo htmlspecialchars($domain); ?>" })
             });
-            
             const data = await response.json();
-            
             if (data.success) {
                 window.open(data.url, '_blank');
             } else {
