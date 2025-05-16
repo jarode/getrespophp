@@ -10,33 +10,14 @@ if (empty($domain)) {
     die(json_encode(['success' => false, 'error' => 'Domain is required']));
 }
 
-// Pobierz APP_ID z CosmosDB
-$settings = CosmosDB::getSettings($domain) ?: [];
-$appId = $settings['app_id'] ?? null;
-
-if (!$appId) {
-    // Spróbuj pobrać przez API Bitrix24
-    $appInfo = CRest::call('app.info');
-    file_put_contents(__DIR__.'/appinfo_debug.log', print_r($appInfo, true), FILE_APPEND);
-    $appId = $appInfo['result']['ID'] ?? null;
-    if ($appId) {
-        $settings['app_id'] = $appId;
-        CosmosDB::saveSettings($domain, $settings);
-    }
-}
-
-if (!$appId) {
-    die(json_encode(['success' => false, 'error' => 'App ID not found for this domain']));
-}
-
 // Testowy klucz Stripe
 $stripe = new \Stripe\StripeClient('sk_test_51RP8JHPCW5Rb7LaJuEMR6gEUKKOVoEyBZzM5n4qj3ZX4C06NP5nMIFVXYTorJHJx8Ji3xlc3djHFpWblYZ0ZWhl800y6kkd9di');
 
 try {
     // Create checkout session
     $checkout_session = $stripe->checkout->sessions->create([
-        'success_url' => "https://$domain/marketplace/app/$appId/?payment=success",
-        'cancel_url' => "https://$domain/marketplace/app/$appId/?payment=cancel",
+        'success_url' => "https://$domain/marketplace/app/?payment=success",
+        'cancel_url' => "https://$domain/marketplace/app/?payment=cancel",
         'payment_method_types' => ['card'],
         'line_items' => [[
             'price_data' => [
