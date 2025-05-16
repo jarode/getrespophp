@@ -48,6 +48,7 @@ class CRest
 				'refresh_token' => htmlspecialchars($_REQUEST['REFRESH_ID']),
 				'domain' => htmlspecialchars($_REQUEST['DOMAIN']),
 				'client_endpoint' => 'https://' . htmlspecialchars($_REQUEST['DOMAIN']) . '/rest/',
+				'app_id' => $_REQUEST['APP_ID'] ?? null,
 			];
 			// Inicjalizacja licencji jeśli nie istnieje
 			$existing = CosmosDB::getSettings($settings['domain']);

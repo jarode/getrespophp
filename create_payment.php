@@ -3,12 +3,18 @@
 require_once(__DIR__.'/vendor/autoload.php');
 require_once(__DIR__.'/crest.php');
 
-// Get domain and app_id from JSON POST
+// Get domain from JSON POST
 $data = json_decode(file_get_contents('php://input'), true);
 $domain = $data['DOMAIN'] ?? '';
-$appId = $data['APP_ID'] ?? '';
-if (empty($domain) || empty($appId)) {
-    die(json_encode(['success' => false, 'error' => 'Domain and App ID are required']));
+if (empty($domain)) {
+    die(json_encode(['success' => false, 'error' => 'Domain is required']));
+}
+
+// Pobierz app_id z CosmosDB
+$settings = CosmosDB::getSettings($domain);
+$appId = $settings['app_id'] ?? '';
+if (empty($appId)) {
+    die(json_encode(['success' => false, 'error' => 'App ID not found for this domain']));
 }
 
 // Testowy klucz Stripe
