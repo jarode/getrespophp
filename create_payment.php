@@ -3,11 +3,12 @@
 require_once(__DIR__.'/vendor/autoload.php');
 require_once(__DIR__.'/crest.php');
 
-// Get domain from JSON POST
+// Get domain and app_id from JSON POST
 $data = json_decode(file_get_contents('php://input'), true);
 $domain = $data['DOMAIN'] ?? '';
-if (empty($domain)) {
-    die(json_encode(['success' => false, 'error' => 'Domain is required']));
+$appId = $data['APP_ID'] ?? '';
+if (empty($domain) || empty($appId)) {
+    die(json_encode(['success' => false, 'error' => 'Domain and App ID are required']));
 }
 
 // Pobierz app_id z CosmosDB
