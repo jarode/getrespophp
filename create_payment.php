@@ -17,8 +17,10 @@ $appId = $settings['app_id'] ?? '';
 if (empty($appId)) {
     // Try to fetch from Bitrix24 API and save to CosmosDB
     $appInfo = CRest::call('app.info');
+    // Log response for debugging
+    file_put_contents(__DIR__.'/appinfo_debug.log', print_r($appInfo, true), FILE_APPEND);
     $appId = $appInfo['result']['ID'] ?? '';
-    if ($appId) {
+    if (!empty($appId)) {
         $settings['app_id'] = $appId;
         CosmosDB::saveSettings($domain, $settings);
     }
