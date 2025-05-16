@@ -7,34 +7,30 @@ require_once(__DIR__.'/crest.php');
 $data = json_decode(file_get_contents('php://input'), true);
 $domain = $data['DOMAIN'] ?? '';
 $appId = $data['APP_ID'] ?? '';
-if (empty($domain) || empty($appId)) {
-    die(json_encode(['success' => false, 'error' => 'Domain and App ID are required']));
+if (empty($domain)) {
+    die(json_encode(['success' => false, 'error' => 'Domain is required']));
+}
+
+// First try to get APP_ID from Bitrix24 API
+$appInfo = CRest::call('app.info');
+// Log response for debugging
+file_put_contents(__DIR__.'/appinfo_debug.log', print_r($appInfo, true), FILE_APPEND);
+$appId = $appInfo['result']['ID'] ?? '';
+
+// If not found in API, use the one from POST
+if ($appId === '' || $appId === null) {
+    $appId = $data['APP_ID'] ?? '';
+}
+
+// If still not found, error out
+if ($appId === '' || $appId === null) {
+    die(json_encode(['success' => false, 'error' => 'App ID not found for this domain']));
 }
 
 // Save APP_ID to settings in CosmosDB
 $settings = CosmosDB::getSettings($domain) ?: [];
 $settings['app_id'] = $appId;
 CosmosDB::saveSettings($domain, $settings);
-
-// Pobierz app_id z CosmosDB
-$settings = CosmosDB::getSettings($domain);
-$appId = $settings['app_id'] ?? '';
-
-if ($appId === '' || $appId === null) {
-    // Try to fetch from Bitrix24 API and save to CosmosDB
-    $appInfo = CRest::call('app.info');
-    // Log response for debugging
-    file_put_contents(__DIR__.'/appinfo_debug.log', print_r($appInfo, true), FILE_APPEND);
-    $appId = $appInfo['result']['ID'] ?? '';
-    if ($appId !== '' && $appId !== null) {
-        $settings['app_id'] = $appId;
-        CosmosDB::saveSettings($domain, $settings);
-    }
-}
-
-if ($appId === '' || $appId === null) {
-    die(json_encode(['success' => false, 'error' => 'App ID not found for this domain']));
-}
 
 // Testowy klucz Stripe
 $stripe = new \Stripe\StripeClient('sk_test_51RP8JHPCW5Rb7LaJuEMR6gEUKKOVoEyBZzM5n4qj3ZX4C06NP5nMIFVXYTorJHJx8Ji3xlc3djHFpWblYZ0ZWhl800y6kkd9di');
