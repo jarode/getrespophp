@@ -67,6 +67,9 @@ try {
         sleep(1);
     } while (!empty($batch['result']) && $start > 0);
 
+    // DEBUG: Zapisz liczbę kontaktów pobranych z crm.contact.list
+    file_put_contents('bitrix_contacts_debug.txt', "Pobrano z crm.contact.list: " . count($allContacts) . "\n", FILE_APPEND);
+
     // Zbuduj mapy kontaktów po ORIGIN_ID i email (fallback)
     $bitrixContactsByOriginId = [];
     $bitrixContactsByEmail = [];
@@ -81,6 +84,7 @@ try {
 
     // Pobierz szczegóły tylko dla kontaktów do synchronizacji (np. do eksportu lub porównania)
     $bitrixContacts = [];
+    $emailsDebug = [];
     foreach ($contactsToFetch as $contactId) {
         $details = CRest::call('crm.contact.get', ['ID' => $contactId]);
         $c = $details['result'] ?? [];
@@ -90,12 +94,16 @@ try {
                 $email = strtolower($em['VALUE']);
                 if ($email) {
                     $bitrixContactsByEmail[$email] = $c;
+                    $emailsDebug[] = $email;
                 }
             }
             $bitrixContacts[] = $c;
         }
         usleep(200000); // 0.2s dla limitu API
     }
+    // DEBUG: Zapisz liczbę kontaktów z emailem i listę emaili
+    file_put_contents('bitrix_contacts_debug.txt', "Z emailem po get: " . count($bitrixContacts) . "\n", FILE_APPEND);
+    file_put_contents('bitrix_contacts_debug.txt', "Emaile: " . implode(", ", $emailsDebug) . "\n", FILE_APPEND);
 
     // Zapisz liczbę kontaktów w Bitrix24 przed synchronizacją
     $bitrixCountBefore = count($bitrixContacts);
