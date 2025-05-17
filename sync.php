@@ -254,10 +254,8 @@ try {
         sleep(1); // Bitrix24 API limit
     }
 
-    // Loguj podsumowanie
-    $logData = [
-        'domain' => $domain,
-        'log_type' => 'sync',
+    // Loguj podsumowanie przez centralny moduł logowania
+    CRest::setLog([
         'direction' => 'sync_both',
         'bitrix_to_gr_added' => $addedToGR,
         'bitrix_to_gr_updated' => $updatedGR,
@@ -265,8 +263,6 @@ try {
         'gr_to_bitrix_added' => $addedToB24,
         'gr_to_bitrix_updated' => $updatedB24,
         'gr_to_bitrix_skipped' => $skippedB24,
-        'time' => date('c'),
-        'source' => 'sync.php',
         'options' => [
             'syncNewOnly' => $syncNewOnly,
             'updateExisting' => $updateExisting,
@@ -274,12 +270,7 @@ try {
             'syncLimit' => $syncLimit,
             'conflictRule' => $conflictRule
         ]
-    ];
-    
-    $logResult = CosmosDB::insert($domain, $logData);
-    if ($logResult['code'] >= 400) {
-        throw new Exception('Failed to log synchronization results: ' . ($logResult['curl_error'] ?? 'Unknown error'));
-    }
+    ], 'sync');
     
     $lastSyncResult = $cosmos->setLastSyncTime($domain, date('c'));
     if ($lastSyncResult['code'] >= 400) {
