@@ -33,6 +33,22 @@ if (!$apiKey || !$listId) {
     exit;
 }
 
+// Odczytaj opcje synchronizacji z requestu
+$syncNewOnly = $data['syncNewOnly'] ?? false;
+$updateExisting = $data['updateExisting'] ?? false;
+$filterTag = $data['filterTag'] ?? false;
+$syncLimit = isset($data['syncLimit']) ? (int)$data['syncLimit'] : 1000;
+$conflictRule = $data['conflictRule'] ?? 'bitrix';
+
+// Wymuś ograniczenia trial/PRO
+if ($status === 'trial') {
+    $syncNewOnly = false;
+    $updateExisting = false;
+    $filterTag = false;
+    $syncLimit = 20;
+    $conflictRule = 'bitrix';
+}
+
 // --- Synchronizacja Bitrix24 -> GetResponse ---
 $bitrixContacts = [];
 $start = 0;
@@ -40,7 +56,7 @@ do {
     $batch = CRest::call('crm.contact.list', [
         'order' => ['ID' => 'ASC'],
         'filter' => ['!EMAIL' => false],
-        'select' => ['ID', 'NAME', 'LAST_NAME', 'EMAIL'],
+        'select' => ['ID', 'NAME', 'LAST_NAME', 'EMAIL', 'DATE_MODIFY'],
         'start' => $start
     ]);
     if (!empty($batch['result'])) {
@@ -54,7 +70,11 @@ do {
 $getResponseContacts = [];
 $page = 1;
 do {
-    $ch = curl_init('https://api.getresponse.com/v3/contacts?query[campaignId]=' . urlencode($listId) . '&perPage=100&page=' . $page);
+    $url = 'https://api.getresponse.com/v3/contacts?query[campaignId]=' . urlencode($listId) . '&perPage=100&page=' . $page;
+    if ($filterTag && !empty($data['tag'])) {
+        $url .= '&query[tag]=' . urlencode($data['tag']);
+    }
+    $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'Content-Type: application/json',
@@ -77,18 +97,71 @@ do {
     }
 } while (true);
 
-$getResponseEmails = array_map(function($c) {
-    return strtolower($c['email'] ?? '');
-}, $getResponseContacts);
+$getResponseEmails = [];
+$getResponseMap = [];
+foreach ($getResponseContacts as $c) {
+    $email = strtolower($c['email'] ?? '');
+    if ($email) {
+        $getResponseEmails[] = $email;
+        $getResponseMap[$email] = $c;
+    }
+}
 
-// Dodaj do GetResponse tylko te kontakty, których nie ma (po emailu)
+// Synchronizuj tylko nowe kontakty (od ostatniej synchronizacji)
+if ($syncNewOnly) {
+    $lastSync = $cosmos->getLastSyncTime($domain);
+    if ($lastSync) {
+        $bitrixContacts = array_filter($bitrixContacts, function($c) use ($lastSync) {
+            return (isset($c['DATE_MODIFY']) && strtotime($c['DATE_MODIFY']) > strtotime($lastSync));
+        });
+    }
+}
+
 $addedToGR = 0;
 $skippedGR = 0;
+$updatedGR = 0;
+$count = 0;
 foreach ($bitrixContacts as $contact) {
+    if ($syncLimit > 0 && $count >= $syncLimit) break;
     $email = strtolower($contact['EMAIL'][0]['VALUE'] ?? '');
     if (!$email) continue;
-    if (in_array($email, $getResponseEmails)) {
+    $exists = in_array($email, $getResponseEmails);
+    if ($exists) {
         $skippedGR++;
+        // Aktualizuj istniejące jeśli opcja włączona
+        if ($updateExisting) {
+            $grContact = $getResponseMap[$email];
+            $update = false;
+            if ($conflictRule === 'bitrix') {
+                $update = true;
+            } elseif ($conflictRule === 'getresponse') {
+                $update = false;
+            } elseif ($conflictRule === 'newer') {
+                $b24Date = isset($contact['DATE_MODIFY']) ? strtotime($contact['DATE_MODIFY']) : 0;
+                $grDate = isset($grContact['changedOn']) ? strtotime($grContact['changedOn']) : 0;
+                $update = $b24Date > $grDate;
+            }
+            if ($update) {
+                $payload = [
+                    'name' => $contact['NAME'] ?? '',
+                ];
+                $ch = curl_init('https://api.getresponse.com/v3/contacts/' . $grContact['contactId']);
+                curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+                curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
+                curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+                curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                    'Content-Type: application/json',
+                    'X-Auth-Token: api-key ' . $apiKey
+                ]);
+                $response = curl_exec($ch);
+                $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                curl_close($ch);
+                if ($httpCode === 202) {
+                    $updatedGR++;
+                }
+                usleep(500000);
+            }
+        }
         continue;
     }
     // Dodaj kontakt do GetResponse
@@ -111,22 +184,58 @@ foreach ($bitrixContacts as $contact) {
     if ($httpCode === 202) {
         $addedToGR++;
     }
+    $count++;
     usleep(500000); // 0.5s dla limitu GetResponse
 }
 
 // --- Synchronizacja GetResponse -> Bitrix24 ---
-// Pobierz wszystkie kontakty z Bitrix24 (emaile)
-$bitrixEmails = array_map(function($c) {
-    return strtolower($c['EMAIL'][0]['VALUE'] ?? '');
-}, $bitrixContacts);
-
+$bitrixEmails = [];
+$bitrixMap = [];
+foreach ($bitrixContacts as $c) {
+    $email = strtolower($c['EMAIL'][0]['VALUE'] ?? '');
+    if ($email) {
+        $bitrixEmails[] = $email;
+        $bitrixMap[$email] = $c;
+    }
+}
 $addedToB24 = 0;
 $skippedB24 = 0;
+$updatedB24 = 0;
+$count = 0;
 foreach ($getResponseContacts as $contact) {
+    if ($syncLimit > 0 && $count >= $syncLimit) break;
     $email = strtolower($contact['email'] ?? '');
     if (!$email) continue;
-    if (in_array($email, $bitrixEmails)) {
+    $exists = in_array($email, $bitrixEmails);
+    if ($exists) {
         $skippedB24++;
+        // Aktualizuj istniejące jeśli opcja włączona
+        if ($updateExisting) {
+            $b24Contact = $bitrixMap[$email];
+            $update = false;
+            if ($conflictRule === 'getresponse') {
+                $update = true;
+            } elseif ($conflictRule === 'bitrix') {
+                $update = false;
+            } elseif ($conflictRule === 'newer') {
+                $b24Date = isset($b24Contact['DATE_MODIFY']) ? strtotime($b24Contact['DATE_MODIFY']) : 0;
+                $grDate = isset($contact['changedOn']) ? strtotime($contact['changedOn']) : 0;
+                $update = $grDate > $b24Date;
+            }
+            if ($update) {
+                $payload = [
+                    'id' => $b24Contact['ID'],
+                    'fields' => [
+                        'NAME' => $contact['name'] ?? '',
+                    ]
+                ];
+                $result = CRest::call('crm.contact.update', $payload);
+                if (!empty($result['result'])) {
+                    $updatedB24++;
+                }
+                sleep(1);
+            }
+        }
         continue;
     }
     // Dodaj kontakt do Bitrix24
@@ -140,6 +249,7 @@ foreach ($getResponseContacts as $contact) {
     if (!empty($result['result'])) {
         $addedToB24++;
     }
+    $count++;
     sleep(1); // Bitrix24 API limit
 }
 
@@ -147,16 +257,35 @@ foreach ($getResponseContacts as $contact) {
 $logData = [
     'direction' => 'sync_both',
     'bitrix_to_gr_added' => $addedToGR,
+    'bitrix_to_gr_updated' => $updatedGR,
     'bitrix_to_gr_skipped' => $skippedGR,
     'gr_to_bitrix_added' => $addedToB24,
+    'gr_to_bitrix_updated' => $updatedB24,
     'gr_to_bitrix_skipped' => $skippedB24,
     'time' => date('c'),
-    'source' => 'sync.php'
+    'source' => 'sync.php',
+    'options' => [
+        'syncNewOnly' => $syncNewOnly,
+        'updateExisting' => $updateExisting,
+        'filterTag' => $filterTag,
+        'syncLimit' => $syncLimit,
+        'conflictRule' => $conflictRule
+    ]
 ];
 CosmosDB::insert($domain, $logData);
+$cosmos->setLastSyncTime($domain, date('c'));
 
 // Zwróć podsumowanie
+$msg = "Synchronization completed. Added to GetResponse: $addedToGR, updated: $updatedGR, skipped: $skippedGR. Added to Bitrix24: $addedToB24, updated: $updatedB24, skipped: $skippedB24.";
 echo json_encode([
     'success' => true,
-    'message' => "Synchronization completed. Added to GetResponse: $addedToGR, skipped: $skippedGR. Added to Bitrix24: $addedToB24, skipped: $skippedB24."
+    'message' => $msg,
+    'summary' => [
+        'bitrix_to_gr_added' => $addedToGR,
+        'bitrix_to_gr_updated' => $updatedGR,
+        'bitrix_to_gr_skipped' => $skippedGR,
+        'gr_to_bitrix_added' => $addedToB24,
+        'gr_to_bitrix_updated' => $updatedB24,
+        'gr_to_bitrix_skipped' => $skippedB24
+    ]
 ]); 
