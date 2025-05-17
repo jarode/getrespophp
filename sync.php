@@ -67,6 +67,9 @@ try {
         sleep(1); // Bitrix24 API limit
     } while (!empty($batch['result']) && $start > 0);
 
+    // Zapisz liczbę kontaktów w Bitrix24 przed synchronizacją
+    $bitrixCountBefore = count($bitrixContacts);
+
     // Pobierz istniejące kontakty z GetResponse (wszystkie z danej listy)
     $getResponseContacts = [];
     $page = 1;
@@ -97,6 +100,9 @@ try {
             break;
         }
     } while (true);
+
+    // Zapisz liczbę kontaktów w GetResponse przed synchronizacją
+    $getResponseCountBefore = count($getResponseContacts);
 
     $getResponseEmails = [];
     $getResponseMap = [];
@@ -254,9 +260,61 @@ try {
         sleep(1); // Bitrix24 API limit
     }
 
+    // Po synchronizacji: pobierz ponownie liczbę kontaktów
+    // Bitrix24
+    $bitrixContactsAfter = [];
+    $start = 0;
+    do {
+        $batch = CRest::call('crm.contact.list', [
+            'order' => ['ID' => 'ASC'],
+            'filter' => ['!EMAIL' => false],
+            'select' => ['ID'],
+            'start' => $start
+        ]);
+        if (!empty($batch['result'])) {
+            $bitrixContactsAfter = array_merge($bitrixContactsAfter, $batch['result']);
+        }
+        $start = $batch['next'] ?? 0;
+        sleep(1);
+    } while (!empty($batch['result']) && $start > 0);
+    $bitrixCountAfter = count($bitrixContactsAfter);
+
+    // GetResponse
+    $getResponseContactsAfter = [];
+    $page = 1;
+    do {
+        $url = 'https://api.getresponse.com/v3/contacts?query[campaignId]=' . urlencode($listId) . '&perPage=100&page=' . $page;
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'Content-Type: application/json',
+            'X-Auth-Token: api-key ' . $apiKey
+        ]);
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($httpCode === 200) {
+            $contacts = json_decode($response, true);
+            if (is_array($contacts) && count($contacts) > 0) {
+                $getResponseContactsAfter = array_merge($getResponseContactsAfter, $contacts);
+                $page++;
+                usleep(500000);
+            } else {
+                break;
+            }
+        } else {
+            break;
+        }
+    } while (true);
+    $getResponseCountAfter = count($getResponseContactsAfter);
+
     // Loguj podsumowanie przez centralny moduł logowania
     CRest::setLog([
         'direction' => 'sync_both',
+        'bitrix_before' => $bitrixCountBefore,
+        'getresponse_before' => $getResponseCountBefore,
+        'bitrix_after' => $bitrixCountAfter,
+        'getresponse_after' => $getResponseCountAfter,
         'bitrix_to_gr_added' => $addedToGR,
         'bitrix_to_gr_updated' => $updatedGR,
         'bitrix_to_gr_skipped' => $skippedGR,
@@ -289,6 +347,12 @@ try {
             'gr_to_bitrix_added' => $addedToB24,
             'gr_to_bitrix_updated' => $updatedB24,
             'gr_to_bitrix_skipped' => $skippedB24
+        ],
+        'details' => [
+            'bitrix_before' => $bitrixCountBefore,
+            'getresponse_before' => $getResponseCountBefore,
+            'bitrix_after' => $bitrixCountAfter,
+            'getresponse_after' => $getResponseCountAfter
         ]
     ]);
 } catch (Exception $e) {
