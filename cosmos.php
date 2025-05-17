@@ -29,110 +29,146 @@ class CosmosDB
      * Insert document into Cosmos DB
      */
     public static function insert($partitionKey, $document) {
-        $resourceLink = "dbs/" . self::DATABASE . "/colls/" . self::CONTAINER;
-        $date = gmdate('D, d M Y H:i:s T');
-        $token = self::build_auth_token('POST', 'docs', $resourceLink, $date, self::KEY);
+        try {
+            $resourceLink = "dbs/" . self::DATABASE . "/colls/" . self::CONTAINER;
+            $date = gmdate('D, d M Y H:i:s T');
+            $token = self::build_auth_token('POST', 'docs', $resourceLink, $date, self::KEY);
 
-        $headers = [
-            'Authorization: ' . $token,
-            'x-ms-date: ' . $date,
-            'x-ms-version: ' . self::API_VERSION,
-            'Content-Type: application/json',
-            'x-ms-documentdb-partitionkey: ["' . $partitionKey . '"]'
-        ];
+            $headers = [
+                'Authorization: ' . $token,
+                'x-ms-date: ' . $date,
+                'x-ms-version: ' . self::API_VERSION,
+                'Content-Type: application/json',
+                'x-ms-documentdb-partitionkey: ["' . $partitionKey . '"]'
+            ];
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, self::ENDPOINT . $resourceLink . '/docs');
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($document));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        $response = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, self::ENDPOINT . $resourceLink . '/docs');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($document));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            $response = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
 
-        return [
-            'code' => $code,
-            'response' => $response,
-            'curl_error' => $curlError
-        ];
+            if ($code >= 400) {
+                throw new Exception('CosmosDB insert failed: ' . ($curlError ?: $response));
+            }
+
+            return [
+                'code' => $code,
+                'response' => $response,
+                'curl_error' => $curlError
+            ];
+        } catch (Exception $e) {
+            return [
+                'code' => 500,
+                'response' => $e->getMessage(),
+                'curl_error' => $e->getMessage()
+            ];
+        }
     }
 
     /**
      * Query document from Cosmos DB by domain
      */
     public static function queryByDomain($partitionKey) {
-        $resourceLink = "dbs/" . self::DATABASE . "/colls/" . self::CONTAINER;
-        $date = gmdate('D, d M Y H:i:s T');
-        $token = self::build_auth_token('POST', 'docs', $resourceLink, $date, self::KEY);
+        try {
+            $resourceLink = "dbs/" . self::DATABASE . "/colls/" . self::CONTAINER;
+            $date = gmdate('D, d M Y H:i:s T');
+            $token = self::build_auth_token('POST', 'docs', $resourceLink, $date, self::KEY);
 
-        $query = [
-            'query' => 'SELECT * FROM c WHERE c.domain = @domain',
-            'parameters' => [
-                ['name' => '@domain', 'value' => $partitionKey]
-            ]
-        ];
+            $query = [
+                'query' => 'SELECT * FROM c WHERE c.domain = @domain',
+                'parameters' => [
+                    ['name' => '@domain', 'value' => $partitionKey]
+                ]
+            ];
 
-        $headers = [
-            'Authorization: ' . $token,
-            'x-ms-date: ' . $date,
-            'x-ms-version: ' . self::API_VERSION,
-            'Content-Type: application/query+json',
-            'x-ms-documentdb-isquery: true',
-            'x-ms-documentdb-partitionkey: ["' . $partitionKey . '"]'
-        ];
+            $headers = [
+                'Authorization: ' . $token,
+                'x-ms-date: ' . $date,
+                'x-ms-version: ' . self::API_VERSION,
+                'Content-Type: application/query+json',
+                'x-ms-documentdb-isquery: true',
+                'x-ms-documentdb-partitionkey: ["' . $partitionKey . '"]'
+            ];
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, self::ENDPOINT . $resourceLink . '/docs');
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($query));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        $response = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, self::ENDPOINT . $resourceLink . '/docs');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($query));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            $response = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
 
-        return [
-            'code' => $code,
-            'response' => $response,
-            'curl_error' => $curlError
-        ];
+            if ($code >= 400) {
+                throw new Exception('CosmosDB query failed: ' . ($curlError ?: $response));
+            }
+
+            return [
+                'code' => $code,
+                'response' => $response,
+                'curl_error' => $curlError
+            ];
+        } catch (Exception $e) {
+            return [
+                'code' => 500,
+                'response' => $e->getMessage(),
+                'curl_error' => $e->getMessage()
+            ];
+        }
     }
 
     /**
      * Update document in Cosmos DB
      */
     public static function update($partitionKey, $document) {
-        $resourceLink = "dbs/" . self::DATABASE . "/colls/" . self::CONTAINER . "/docs/" . $document['id'];
-        $date = gmdate('D, d M Y H:i:s T');
-        $token = self::build_auth_token('PUT', 'docs', $resourceLink, $date, self::KEY);
+        try {
+            $resourceLink = "dbs/" . self::DATABASE . "/colls/" . self::CONTAINER . "/docs/" . $document['id'];
+            $date = gmdate('D, d M Y H:i:s T');
+            $token = self::build_auth_token('PUT', 'docs', $resourceLink, $date, self::KEY);
 
-        $headers = [
-            'Authorization: ' . $token,
-            'x-ms-date: ' . $date,
-            'x-ms-version: ' . self::API_VERSION,
-            'Content-Type: application/json',
-            'x-ms-documentdb-partitionkey: ["' . $partitionKey . '"]'
-        ];
+            $headers = [
+                'Authorization: ' . $token,
+                'x-ms-date: ' . $date,
+                'x-ms-version: ' . self::API_VERSION,
+                'Content-Type: application/json',
+                'x-ms-documentdb-partitionkey: ["' . $partitionKey . '"]'
+            ];
 
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_URL, self::ENDPOINT . $resourceLink);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($document));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-        $response = curl_exec($ch);
-        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlError = curl_error($ch);
-        curl_close($ch);
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, self::ENDPOINT . $resourceLink);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'PUT');
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($document));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+            $response = curl_exec($ch);
+            $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
 
-        return [
-            'code' => $code,
-            'response' => $response,
-            'curl_error' => $curlError
-        ];
+            if ($code >= 400) {
+                throw new Exception('CosmosDB update failed: ' . ($curlError ?: $response));
+            }
+
+            return [
+                'code' => $code,
+                'response' => $response,
+                'curl_error' => $curlError
+            ];
+        } catch (Exception $e) {
+            return [
+                'code' => 500,
+                'response' => $e->getMessage(),
+                'curl_error' => $e->getMessage()
+            ];
+        }
     }
 
     /**
