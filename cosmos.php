@@ -279,4 +279,50 @@ class CosmosDB
         }
         return null;
     }
+
+    /**
+     * Zapisz datę ostatniej synchronizacji
+     * @param string $domain
+     * @param string $datetime (format ISO8601)
+     * @return array Wynik operacji
+     */
+    public static function setLastSyncTime($domain, $datetime)
+    {
+        $logType = 'last_sync';
+        $now = gmdate('c');
+        $doc = [
+            'domain' => $domain,
+            'log_type' => $logType,
+            'log_data' => ['last_sync' => $datetime],
+            'log_time' => $now,
+            'source' => 'setLastSyncTime',
+            'id' => uniqid()
+        ];
+        return self::insert($domain, $doc);
+    }
+
+    /**
+     * Pobierz datę ostatniej synchronizacji (string lub null)
+     * @param string $domain
+     * @return string|null
+     */
+    public static function getLastSyncTime($domain)
+    {
+        $result = self::queryByDomain($domain);
+        if ($result['code'] >= 200 && $result['code'] < 300) {
+            $data = json_decode($result['response'], true);
+            if (isset($data['Documents']) && is_array($data['Documents'])) {
+                $syncDocs = array_filter($data['Documents'], function($doc) {
+                    return isset($doc['log_type']) && $doc['log_type'] === 'last_sync';
+                });
+                if (!empty($syncDocs)) {
+                    usort($syncDocs, function($a, $b) {
+                        return strcmp($b['log_time'], $a['log_time']);
+                    });
+                    return $syncDocs[0]['log_data']['last_sync'] ?? null;
+                }
+            }
+        }
+        return null;
+    }
 } 
