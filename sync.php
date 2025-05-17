@@ -73,6 +73,7 @@ try {
     $bitrixEmails = [];
     $bitrixMap = [];
     $start = 0;
+    $allBitrixRaw = [];
     do {
         $batch = CRest::call('crm.contact.list', [
             'order' => ['ID' => 'ASC'],
@@ -82,6 +83,7 @@ try {
         ]);
         if (!empty($batch['result'])) {
             foreach ($batch['result'] as $c) {
+                $allBitrixRaw[] = $c;
                 $emails = $c['EMAIL'] ?? [];
                 foreach ($emails as $em) {
                     $email = strtolower($em['VALUE']);
@@ -95,6 +97,9 @@ try {
         $start = $batch['next'] ?? 0;
         sleep(1);
     } while (!empty($batch['result']) && $start > 0);
+    // DEBUG: Zapisz do pliku surową listę kontaktów i zmapowane emaile
+    file_put_contents('bitrix_contacts_debug.txt', "RAW contacts:\n" . json_encode($allBitrixRaw, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND);
+    file_put_contents('bitrix_contacts_debug.txt', "Mapped emails:\n" . implode(", ", $bitrixEmails) . "\n", FILE_APPEND);
 
     // --- Importuj kontakty z GetResponse do Bitrix24 ---
     $added = 0;
