@@ -81,9 +81,8 @@ try {
         $contactsToFetch[] = $contact['ID'];
     }
 
-    // Pobierz szczegóły tylko dla kontaktów do synchronizacji (np. do eksportu lub porównania)
+    // Pobierz szczegóły tylko dla kontaktów do synchronizacji
     $bitrixContacts = [];
-    $emailsDebug = [];
     foreach ($contactsToFetch as $contactId) {
         $details = CRest::call('crm.contact.get', ['ID' => $contactId]);
         $c = $details['result'] ?? [];
@@ -93,7 +92,6 @@ try {
                 $email = strtolower($em['VALUE']);
                 if ($email) {
                     $bitrixContactsByEmail[$email] = $c;
-                    $emailsDebug[] = $email;
                 }
             }
             $bitrixContacts[] = $c;
@@ -102,12 +100,12 @@ try {
     }
     // DEBUG: Zapisz liczbę kontaktów z emailem i listę emaili
     file_put_contents('bitrix_contacts_debug.txt', "Z emailem po get: " . count($bitrixContacts) . "\n", FILE_APPEND);
-    file_put_contents('bitrix_contacts_debug.txt', "Emaile: " . implode(", ", $emailsDebug) . "\n", FILE_APPEND);
+    file_put_contents('bitrix_contacts_debug.txt', "Emaile: " . implode(", ", array_keys($bitrixContactsByEmail)) . "\n", FILE_APPEND);
 
     // Zapisz liczbę kontaktów w Bitrix24 przed synchronizacją
     $bitrixCountBefore = count($bitrixContacts);
 
-    // Pobierz istniejące kontakty z GetResponse (wszystkie z danej listy)
+    // Pobierz istniejące kontakty z GetResponse
     $getResponseContacts = [];
     $page = 1;
     do {
@@ -227,6 +225,18 @@ try {
         curl_close($ch);
         if ($httpCode === 202) {
             $addedToGR++;
+            // Aktualizuj ORIGIN_ID w Bitrix24
+            $responseData = json_decode($response, true);
+            if (!empty($responseData['contactId'])) {
+                CRest::call('crm.contact.update', [
+                    'id' => $contact['ID'],
+                    'fields' => [
+                        'ORIGIN_ID' => $responseData['contactId'],
+                        'ORIGINATOR_ID' => 'getresponse',
+                        'ORIGIN_VERSION' => date('Y-m-d H:i:s')
+                    ]
+                ]);
+            }
         }
         $count++;
         usleep(500000); // 0.5s dla limitu GetResponse
@@ -242,6 +252,7 @@ try {
             $bitrixMap[$email] = $c;
         }
     }
+
     $addedToB24 = 0;
     $skippedB24 = 0;
     $updatedB24 = 0;
@@ -267,40 +278,35 @@ try {
                     $update = $grDate > $b24Date;
                 }
                 if ($update) {
-                    $payload = [
+                    CRest::call('crm.contact.update', [
                         'id' => $b24Contact['ID'],
                         'fields' => [
                             'NAME' => $contact['name'] ?? '',
-                            'ORIGIN_ID' => $contact['contactId'] ?? '',
+                            'ORIGIN_ID' => $contact['contactId'],
                             'ORIGINATOR_ID' => 'getresponse',
-                            'ORIGIN_VERSION' => $contact['changedOn'] ?? date('c')
+                            'ORIGIN_VERSION' => date('Y-m-d H:i:s')
                         ]
-                    ];
-                    $result = CRest::call('crm.contact.update', $payload);
-                    if (!empty($result['result'])) {
-                        $updatedB24++;
-                    }
-                    sleep(1);
+                    ]);
+                    $updatedB24++;
                 }
             }
             continue;
         }
         // Dodaj kontakt do Bitrix24
-        $payload = [
+        $result = CRest::call('crm.contact.add', [
             'fields' => [
                 'NAME' => $contact['name'] ?? '',
                 'EMAIL' => [['VALUE' => $email, 'VALUE_TYPE' => 'WORK']],
-                'ORIGIN_ID' => $contact['contactId'] ?? '',
+                'ORIGIN_ID' => $contact['contactId'],
                 'ORIGINATOR_ID' => 'getresponse',
-                'ORIGIN_VERSION' => $contact['changedOn'] ?? date('c')
+                'ORIGIN_VERSION' => date('Y-m-d H:i:s')
             ]
-        ];
-        $result = CRest::call('crm.contact.add', $payload);
+        ]);
         if (!empty($result['result'])) {
             $addedToB24++;
         }
         $count++;
-        sleep(1); // Bitrix24 API limit
+        usleep(200000); // 0.2s dla limitu API
     }
 
     // Po synchronizacji: pobierz ponownie liczbę kontaktów
@@ -351,52 +357,33 @@ try {
     } while (true);
     $getResponseCountAfter = count($getResponseContactsAfter);
 
-    // Loguj podsumowanie przez centralny moduł logowania
-    CRest::setLog([
-        'direction' => 'sync_both',
+    // Zapisz wyniki synchronizacji
+    $syncResults = [
         'bitrix_before' => $bitrixCountBefore,
         'getresponse_before' => $getResponseCountBefore,
-        'bitrix_after' => $bitrixCountAfter,
-        'getresponse_after' => $getResponseCountAfter,
-        'bitrix_to_gr_added' => $addedToGR,
-        'bitrix_to_gr_updated' => $updatedGR,
-        'bitrix_to_gr_skipped' => $skippedGR,
-        'gr_to_bitrix_added' => $addedToB24,
-        'gr_to_bitrix_updated' => $updatedB24,
-        'gr_to_bitrix_skipped' => $skippedB24,
-        'options' => [
-            'syncNewOnly' => $syncNewOnly,
-            'updateExisting' => $updateExisting,
-            'filterTag' => $filterTag,
-            'syncLimit' => $syncLimit,
-            'conflictRule' => $conflictRule
-        ]
-    ], 'sync');
-    
-    $lastSyncResult = $cosmos->setLastSyncTime($domain, date('c'));
-    if ($lastSyncResult['code'] >= 400) {
-        throw new Exception('Failed to update last sync time: ' . ($lastSyncResult['curl_error'] ?? 'Unknown error'));
-    }
+        'added_to_gr' => $addedToGR,
+        'skipped_gr' => $skippedGR,
+        'updated_gr' => $updatedGR,
+        'added_to_b24' => $addedToB24,
+        'skipped_b24' => $skippedB24,
+        'updated_b24' => $updatedB24,
+        'sync_time' => date('Y-m-d H:i:s')
+    ];
 
-    // Zwróć podsumowanie
-    $msg = "Synchronization completed. Added to GetResponse: $addedToGR, updated: $updatedGR, skipped: $skippedGR. Added to Bitrix24: $addedToB24, updated: $updatedB24, skipped: $skippedB24.";
+    // Zapisz logi do CosmosDB
+    $cosmos->insert('sync_logs', [
+        'id' => uniqid('sync_'),
+        'domain' => $domain,
+        'results' => $syncResults,
+        'timestamp' => date('Y-m-d H:i:s')
+    ]);
+
+    // Aktualizuj czas ostatniej synchronizacji
+    $cosmos->updateLastSyncTime($domain);
+
     echo json_encode([
         'success' => true,
-        'message' => $msg,
-        'summary' => [
-            'bitrix_to_gr_added' => $addedToGR,
-            'bitrix_to_gr_updated' => $updatedGR,
-            'bitrix_to_gr_skipped' => $skippedGR,
-            'gr_to_bitrix_added' => $addedToB24,
-            'gr_to_bitrix_updated' => $updatedB24,
-            'gr_to_bitrix_skipped' => $skippedB24
-        ],
-        'details' => [
-            'bitrix_before' => $bitrixCountBefore,
-            'getresponse_before' => $getResponseCountBefore,
-            'bitrix_after' => $bitrixCountAfter,
-            'getresponse_after' => $getResponseCountAfter
-        ]
+        'results' => $syncResults
     ]);
 } catch (Exception $e) {
     http_response_code(500);
