@@ -379,7 +379,7 @@ try {
     ]);
 
     // Aktualizuj czas ostatniej synchronizacji
-    $cosmos->updateLastSyncTime($domain);
+    $cosmos->setLastSyncTime($domain);
 
     echo json_encode([
         'success' => true,
