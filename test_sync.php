@@ -1,22 +1,15 @@
 <?php
 // test_sync.php
-// Testuje endpoint sync.php z przykładowymi danymi
+// Testuje endpoint sync.php z nową logiką importu kontaktów z GetResponse do Bitrix24
 
 $domain = 'b24-5xjk9p.bitrix24.com'; // domena testowa Bitrix24
-$apiKey = '62a96f1wzus8pp7s6o83s233j2to908k';
-$listId = 'id0RG';
 
-// Opcje synchronizacji (możesz zmienić na potrzeby testów)
+// Payload tylko z domeną
 $options = [
-    'DOMAIN' => $domain,
-    'syncNewOnly' => false,      // synchronizuj tylko nowe kontakty
-    'updateExisting' => true,    // aktualizuj istniejące kontakty
-    'filterTag' => false,        // filtruj po tagu
-    'syncLimit' => 5,            // limit synchronizacji (0 = bez limitu)
-    'conflictRule' => 'newer'    // reguła rozwiązywania konfliktów: 'bitrix', 'getresponse', 'newer'
+    'DOMAIN' => $domain
 ];
 
-// URL endpointu synchronizacji
+// URL endpointu importu
 $url = 'https://bitrix-php-app.nicetree-ab137c51.westeurope.azurecontainerapps.io/sync.php';
 
 // Przygotuj request
@@ -53,21 +46,17 @@ echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
 
 // Dodatkowe informacje w konsoli
 if (php_sapi_name() === 'cli') {
-    echo "\n\nStatus synchronizacji:\n";
+    echo "\n\nStatus importu:\n";
     if ($httpCode === 200 && isset($result['response']['data']['success']) && $result['response']['data']['success']) {
         $res = $result['response']['data']['results'];
-        echo "✓ Synchronizacja zakończona sukcesem\n";
-        echo "  Bitrix24: {$res['bitrix_before']} kontaktów przed synchronizacją\n";
-        echo "  GetResponse: {$res['getresponse_before']} kontaktów przed synchronizacją\n";
-        echo "  Dodano do GetResponse: {$res['added_to_gr']}\n";
-        echo "  Zaktualizowano w GetResponse: {$res['updated_gr']}\n";
-        echo "  Pominięto w GetResponse: {$res['skipped_gr']}\n";
-        echo "  Dodano do Bitrix24: {$res['added_to_b24']}\n";
-        echo "  Zaktualizowano w Bitrix24: {$res['updated_b24']}\n";
-        echo "  Pominięto w Bitrix24: {$res['skipped_b24']}\n";
-        echo "  Czas synchronizacji: {$res['sync_time']}\n";
+        echo "✓ Import zakończony sukcesem\n";
+        echo "  Zaimportowano: {$res['imported']}\n";
+        echo "  Zaktualizowano: {$res['updated']}\n";
+        echo "  Pominięto: {$res['skipped']}\n";
+        echo "  Łącznie w GetResponse: {$res['total_getresponse']}\n";
+        echo "  Łącznie w Bitrix24: {$res['total_bitrix']}\n";
     } else {
-        echo "✗ Błąd synchronizacji\n";
+        echo "✗ Błąd importu\n";
         echo "  Kod HTTP: $httpCode\n";
         if ($curlError) {
             echo "  Błąd cURL: $curlError\n";
