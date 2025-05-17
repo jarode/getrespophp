@@ -237,6 +237,7 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
     const listIdSelect = document.getElementById('listId');
     const listLoader = document.getElementById('listLoader');
     const listError = document.getElementById('listError');
+    let connectionStatus = 'Unknown';
 
     // Funkcja do pobierania domeny Bitrix24 z URL (jeśli nie ma w PHP)
     function getBitrixDomain() {
@@ -268,10 +269,19 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                     opt.textContent = list.name + ' (' + list.id + ')';
                     listIdSelect.appendChild(opt);
                 });
+                // Walidacja połączenia
+                const selectedListId = listIdSelect.value;
+                if (selectedListId && result.lists.some(l => l.id === selectedListId)) {
+                    connectionStatus = 'Connected';
+                } else {
+                    connectionStatus = 'Not connected';
+                }
             } else {
+                connectionStatus = 'Not connected';
                 listError.textContent = result.error || 'No lists found.';
             }
         } catch (e) {
+            connectionStatus = 'Not connected';
             listError.textContent = 'Error fetching lists.';
         }
         listLoader.style.display = 'none';
@@ -306,13 +316,20 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
             alert('Please select a list.');
             return;
         }
+        // Ustaw connectionStatus na podstawie wybranej listy
+        if (listId && Array.from(listIdSelect.options).some(opt => opt.value === listId)) {
+            connectionStatus = 'Connected';
+        } else {
+            connectionStatus = 'Not connected';
+        }
         const response = await fetch('save_settings.php', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 DOMAIN: domain,
                 getresponse_api_key: apiKey,
-                getresponse_list_id: listId
+                getresponse_list_id: listId,
+                connection_status: connectionStatus
             })
         });
         const result = await response.json();

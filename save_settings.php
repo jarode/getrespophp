@@ -40,7 +40,8 @@ try {
     }
     $result = $cosmos->saveSettings($data['DOMAIN'], [
         'getresponse_api_key' => $data['getresponse_api_key'],
-        'getresponse_list_id' => $data['getresponse_list_id']
+        'getresponse_list_id' => $data['getresponse_list_id'],
+        'connection_status' => $data['connection_status'] ?? 'Unknown'
     ]);
 
     echo json_encode(['success' => true]);
