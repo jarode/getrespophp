@@ -185,10 +185,48 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                         </div>
                         <div class="tab-pane fade" id="sync" role="tabpanel" aria-labelledby="sync-tab">
                             <?php if ($canSync): ?>
-                                <button id="startSync" class="btn btn-success">Start synchronization</button>
-                                <?php if ($status === 'trial'): ?>
-                                    <div class="alert alert-info mt-2">Trial version: limit of 20 contacts.</div>
-                                <?php endif; ?>
+                                <form id="syncForm">
+                                    <div class="mb-3">
+                                        <label class="form-label">Synchronization options:</label>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="syncNewOnly" name="syncNewOnly" <?php if ($status === 'trial') echo 'disabled'; ?>>
+                                            <label class="form-check-label" for="syncNewOnly">Synchronize only new contacts (since last sync)</label>
+                                            <?php if ($status === 'trial'): ?><span class="text-muted ms-2">(PRO)</span><?php endif; ?>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="updateExisting" name="updateExisting" <?php if ($status === 'trial') echo 'disabled'; ?>>
+                                            <label class="form-check-label" for="updateExisting">Update existing contacts</label>
+                                            <?php if ($status === 'trial'): ?><span class="text-muted ms-2">(PRO)</span><?php endif; ?>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="filterEmailOnly" name="filterEmailOnly" checked disabled>
+                                            <label class="form-check-label" for="filterEmailOnly">Synchronize only contacts with email</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="filterTag" name="filterTag" <?php if ($status === 'trial') echo 'disabled'; ?>>
+                                            <label class="form-check-label" for="filterTag">Synchronize only contacts with tag/segment</label>
+                                            <?php if ($status === 'trial'): ?><span class="text-muted ms-2">(PRO)</span><?php endif; ?>
+                                        </div>
+                                        <div class="mb-2 mt-2">
+                                            <label for="syncLimit" class="form-label">Limit contacts per sync:</label>
+                                            <input type="number" class="form-control w-auto d-inline" id="syncLimit" name="syncLimit" min="1" max="10000" value="<?php echo $status === 'trial' ? 20 : 1000; ?>" <?php if ($status === 'trial') echo 'readonly'; ?>>
+                                            <?php if ($status === 'trial'): ?><span class="text-muted ms-2">(max 20 w trialu, PRO bez limitu)</span><?php endif; ?>
+                                        </div>
+                                        <div class="mb-2">
+                                            <label for="conflictRule" class="form-label">Conflict resolution:</label>
+                                            <select class="form-select w-auto d-inline" id="conflictRule" name="conflictRule" <?php if ($status === 'trial') echo 'disabled'; ?>>
+                                                <option value="bitrix">Prefer Bitrix24 data</option>
+                                                <option value="getresponse">Prefer GetResponse data</option>
+                                                <option value="newer">Prefer newer modification</option>
+                                            </select>
+                                            <?php if ($status === 'trial'): ?><span class="text-muted ms-2">(PRO)</span><?php endif; ?>
+                                        </div>
+                                    </div>
+                                    <button id="startSync" class="btn btn-success">Start synchronization</button>
+                                    <?php if ($status === 'trial'): ?>
+                                        <div class="alert alert-info mt-2">Trial version: limit of 20 contacts. Advanced options available in PRO.</div>
+                                    <?php endif; ?>
+                                </form>
                             <?php else: ?>
                                 <div class="alert alert-warning mt-3">Synchronization is available only with an active license or during the trial period.</div>
                                 <button class="btn btn-success" disabled>Start synchronization</button>
@@ -343,16 +381,36 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
 
     // Synchronizacja
     <?php if ($canSync): ?>
+    const syncForm = document.getElementById('syncForm');
     const syncBtn = document.getElementById('startSync');
-    if (syncBtn) {
-        syncBtn.onclick = async function() {
+    if (syncForm && syncBtn) {
+        syncBtn.onclick = async function(e) {
+            e.preventDefault();
             syncBtn.disabled = true;
             syncBtn.textContent = 'Synchronizing...';
+            // Pobierz opcje synchronizacji
+            const options = {
+                syncNewOnly: document.getElementById('syncNewOnly')?.checked || false,
+                updateExisting: document.getElementById('updateExisting')?.checked || false,
+                filterEmailOnly: true,
+                filterTag: document.getElementById('filterTag')?.checked || false,
+                syncLimit: parseInt(document.getElementById('syncLimit')?.value || '0', 10),
+                conflictRule: document.getElementById('conflictRule')?.value || 'bitrix',
+            };
+            // W trialu wymuś limity/opcje
+            <?php if ($status === 'trial'): ?>
+            options.syncNewOnly = false;
+            options.updateExisting = false;
+            options.filterTag = false;
+            options.syncLimit = 20;
+            options.conflictRule = 'bitrix';
+            <?php endif; ?>
             const response = await fetch('sync.php', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    DOMAIN: getBitrixDomain()
+                    DOMAIN: getBitrixDomain(),
+                    ...options
                 })
             });
             const result = await response.json();
