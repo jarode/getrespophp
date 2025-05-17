@@ -234,6 +234,9 @@ try {
                         'id' => $b24Contact['ID'],
                         'fields' => [
                             'NAME' => $contact['name'] ?? '',
+                            'ORIGIN_ID' => $contact['contactId'] ?? '',
+                            'ORIGINATOR_ID' => 'getresponse',
+                            'ORIGIN_VERSION' => $contact['changedOn'] ?? date('c')
                         ]
                     ];
                     $result = CRest::call('crm.contact.update', $payload);
@@ -249,7 +252,10 @@ try {
         $payload = [
             'fields' => [
                 'NAME' => $contact['name'] ?? '',
-                'EMAIL' => [['VALUE' => $email, 'VALUE_TYPE' => 'WORK']]
+                'EMAIL' => [['VALUE' => $email, 'VALUE_TYPE' => 'WORK']],
+                'ORIGIN_ID' => $contact['contactId'] ?? '',
+                'ORIGINATOR_ID' => 'getresponse',
+                'ORIGIN_VERSION' => $contact['changedOn'] ?? date('c')
             ]
         ];
         $result = CRest::call('crm.contact.add', $payload);
