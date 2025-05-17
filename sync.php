@@ -57,6 +57,7 @@ try {
         $batch = CRest::call('crm.contact.list', [
             'order' => ['ID' => 'ASC'],
             'select' => ['ID', 'NAME', 'ORIGIN_ID', 'ORIGINATOR_ID', 'ORIGIN_VERSION', 'DATE_MODIFY'],
+            'filter' => ['HAS_EMAIL' => 'Y'],
             'start' => $start
         ]);
         if (!empty($batch['result'])) {
