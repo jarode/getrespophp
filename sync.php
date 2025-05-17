@@ -50,22 +50,52 @@ if ($status === 'trial') {
 }
 
 try {
-    // --- Synchronizacja Bitrix24 -> GetResponse ---
-    $bitrixContacts = [];
+    // --- Pobierz kontakty z Bitrix24 (optymalnie) ---
+    $allContacts = [];
     $start = 0;
     do {
         $batch = CRest::call('crm.contact.list', [
             'order' => ['ID' => 'ASC'],
-            'filter' => ['!EMAIL' => false],
-            'select' => ['ID', 'NAME', 'LAST_NAME', 'EMAIL', 'DATE_MODIFY'],
+            'filter' => ['HAS_EMAIL' => 'Y'],
+            'select' => ['ID', 'ORIGIN_ID', 'ORIGINATOR_ID', 'ORIGIN_VERSION', 'DATE_MODIFY'],
             'start' => $start
         ]);
         if (!empty($batch['result'])) {
-            $bitrixContacts = array_merge($bitrixContacts, $batch['result']);
+            $allContacts = array_merge($allContacts, $batch['result']);
         }
         $start = $batch['next'] ?? 0;
-        sleep(1); // Bitrix24 API limit
+        sleep(1);
     } while (!empty($batch['result']) && $start > 0);
+
+    // Zbuduj mapy kontaktów po ORIGIN_ID i email (fallback)
+    $bitrixContactsByOriginId = [];
+    $bitrixContactsByEmail = [];
+    $contactsToFetch = [];
+    foreach ($allContacts as $contact) {
+        if (!empty($contact['ORIGIN_ID'])) {
+            $bitrixContactsByOriginId[$contact['ORIGIN_ID']] = $contact;
+        }
+        // Zaznacz do pobrania szczegółów, jeśli nie ma ORIGIN_ID lub wymaga eksportu
+        $contactsToFetch[] = $contact['ID'];
+    }
+
+    // Pobierz szczegóły tylko dla kontaktów do synchronizacji (np. do eksportu lub porównania)
+    $bitrixContacts = [];
+    foreach ($contactsToFetch as $contactId) {
+        $details = CRest::call('crm.contact.get', ['ID' => $contactId]);
+        $c = $details['result'] ?? [];
+        $emails = $c['EMAIL'] ?? [];
+        if (!empty($emails)) {
+            foreach ($emails as $em) {
+                $email = strtolower($em['VALUE']);
+                if ($email) {
+                    $bitrixContactsByEmail[$email] = $c;
+                }
+            }
+            $bitrixContacts[] = $c;
+        }
+        usleep(200000); // 0.2s dla limitu API
+    }
 
     // Zapisz liczbę kontaktów w Bitrix24 przed synchronizacją
     $bitrixCountBefore = count($bitrixContacts);
