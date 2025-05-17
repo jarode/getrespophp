@@ -33,89 +33,15 @@ if (!$apiKey || !$listId) {
     exit;
 }
 
-// Odczytaj opcje synchronizacji z requestu
-$syncNewOnly = $data['syncNewOnly'] ?? false;
-$updateExisting = $data['updateExisting'] ?? false;
-$filterTag = $data['filterTag'] ?? false;
-$syncLimit = isset($data['syncLimit']) ? (int)$data['syncLimit'] : 1000;
-$conflictRule = $data['conflictRule'] ?? 'bitrix';
-
-// Wymuś ograniczenia trial/PRO
-if ($status === 'trial') {
-    $syncNewOnly = false;
-    $updateExisting = false;
-    $filterTag = false;
-    $syncLimit = 20;
-    $conflictRule = 'bitrix';
-}
+// Ograniczenie liczby kontaktów w trialu
+$importLimit = ($status === 'trial') ? 100 : 100000;
 
 try {
-    // --- Pobierz kontakty z Bitrix24 (optymalnie) ---
-    $allContacts = [];
-    $start = 0;
-    do {
-        $batch = CRest::call('crm.contact.list', [
-            'order' => ['ID' => 'ASC'],
-            'select' => ['ID', 'NAME', 'ORIGIN_ID', 'ORIGINATOR_ID', 'ORIGIN_VERSION', 'DATE_MODIFY'],
-            'filter' => ['HAS_EMAIL' => 'Y'],
-            'start' => $start
-        ]);
-        if (!empty($batch['result'])) {
-            $allContacts = array_merge($allContacts, $batch['result']);
-        }
-        $start = $batch['next'] ?? 0;
-        sleep(1);
-    } while (!empty($batch['result']) && $start > 0);
-
-    // DEBUG: Zapisz liczbę kontaktów pobranych z crm.contact.list
-    file_put_contents('bitrix_contacts_debug.txt', "Pobrano z crm.contact.list: " . count($allContacts) . "\n", FILE_APPEND);
-
-    // Zbuduj mapy kontaktów po ORIGIN_ID i email (fallback)
-    $bitrixContactsByOriginId = [];
-    $bitrixContactsByEmail = [];
-    $contactsToFetch = [];
-    foreach ($allContacts as $contact) {
-        if (!empty($contact['ORIGIN_ID'])) {
-            $bitrixContactsByOriginId[$contact['ORIGIN_ID']] = $contact;
-        }
-        // Zaznacz do pobrania szczegółów, jeśli nie ma ORIGIN_ID lub wymaga eksportu
-        $contactsToFetch[] = $contact['ID'];
-    }
-
-    // Pobierz szczegóły tylko dla kontaktów do synchronizacji
-    $bitrixContacts = [];
-    foreach ($contactsToFetch as $contactId) {
-        $details = CRest::call('crm.contact.get', ['ID' => $contactId]);
-        $c = $details['result'] ?? [];
-        // DEBUG: Zapisz szczegóły kontaktu
-        file_put_contents('bitrix_contacts_debug.txt', "Kontakt ID {$contactId}: " . json_encode($c) . "\n", FILE_APPEND);
-        $emails = $c['EMAIL'] ?? [];
-        if (!empty($emails)) {
-            foreach ($emails as $em) {
-                $email = strtolower($em['VALUE']);
-                if ($email) {
-                    $bitrixContactsByEmail[$email] = $c;
-                }
-            }
-            $bitrixContacts[] = $c;
-        }
-        usleep(200000); // 0.2s dla limitu API
-    }
-    // DEBUG: Zapisz liczbę kontaktów z emailem i listę emaili
-    file_put_contents('bitrix_contacts_debug.txt', "Z emailem po get: " . count($bitrixContacts) . "\n", FILE_APPEND);
-    file_put_contents('bitrix_contacts_debug.txt', "Emaile: " . implode(", ", array_keys($bitrixContactsByEmail)) . "\n", FILE_APPEND);
-
-    // Zapisz liczbę kontaktów w Bitrix24 przed synchronizacją
-    $bitrixCountBefore = count($bitrixContacts);
-
-    // Pobierz istniejące kontakty z GetResponse
+    // --- Pobierz kontakty z GetResponse ---
     $getResponseContacts = [];
     $page = 1;
     do {
         $url = 'https://api.getresponse.com/v3/contacts?query[campaignId]=' . urlencode($listId) . '&perPage=100&page=' . $page;
-        if ($filterTag && !empty($data['tag'])) {
-            $url .= '&query[tag]=' . urlencode($data['tag']);
-        }
         $ch = curl_init($url);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -129,6 +55,10 @@ try {
             $contacts = json_decode($response, true);
             if (is_array($contacts) && count($contacts) > 0) {
                 $getResponseContacts = array_merge($getResponseContacts, $contacts);
+                if (count($getResponseContacts) >= $importLimit) {
+                    $getResponseContacts = array_slice($getResponseContacts, 0, $importLimit);
+                    break;
+                }
                 $page++;
                 usleep(500000); // 0.5s dla limitu GetResponse
             } else {
@@ -139,254 +69,100 @@ try {
         }
     } while (true);
 
-    // Zapisz liczbę kontaktów w GetResponse przed synchronizacją
-    $getResponseCountBefore = count($getResponseContacts);
-
-    $getResponseEmails = [];
-    $getResponseMap = [];
-    foreach ($getResponseContacts as $c) {
-        $email = strtolower($c['email'] ?? '');
-        if ($email) {
-            $getResponseEmails[] = $email;
-            $getResponseMap[$email] = $c;
-        }
-    }
-
-    // Synchronizuj tylko nowe kontakty (od ostatniej synchronizacji)
-    if ($syncNewOnly) {
-        $lastSync = $cosmos->getLastSyncTime($domain);
-        if ($lastSync) {
-            $bitrixContacts = array_filter($bitrixContacts, function($c) use ($lastSync) {
-                return (isset($c['DATE_MODIFY']) && strtotime($c['DATE_MODIFY']) > strtotime($lastSync));
-            });
-        }
-    }
-
-    $addedToGR = 0;
-    $skippedGR = 0;
-    $updatedGR = 0;
-    $count = 0;
-    foreach ($bitrixContacts as $contact) {
-        if ($syncLimit > 0 && $count >= $syncLimit) break;
-        $email = strtolower($contact['EMAIL'][0]['VALUE'] ?? '');
-        if (!$email) continue;
-        $exists = in_array($email, $getResponseEmails);
-        if ($exists) {
-            $skippedGR++;
-            // Aktualizuj istniejące jeśli opcja włączona
-            if ($updateExisting) {
-                $grContact = $getResponseMap[$email];
-                $update = false;
-                if ($conflictRule === 'bitrix') {
-                    $update = true;
-                } elseif ($conflictRule === 'getresponse') {
-                    $update = false;
-                } elseif ($conflictRule === 'newer') {
-                    $b24Date = isset($contact['DATE_MODIFY']) ? strtotime($contact['DATE_MODIFY']) : 0;
-                    $grDate = isset($grContact['changedOn']) ? strtotime($grContact['changedOn']) : 0;
-                    $update = $b24Date > $grDate;
-                }
-                if ($update) {
-                    $payload = [
-                        'name' => $contact['NAME'] ?? '',
-                    ];
-                    $ch = curl_init('https://api.getresponse.com/v3/contacts/' . $grContact['contactId']);
-                    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-                    curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'POST');
-                    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-                    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-                        'Content-Type: application/json',
-                        'X-Auth-Token: api-key ' . $apiKey
-                    ]);
-                    $response = curl_exec($ch);
-                    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-                    curl_close($ch);
-                    if ($httpCode === 202) {
-                        $updatedGR++;
-                    }
-                    usleep(500000);
-                }
-            }
-            continue;
-        }
-        // Dodaj kontakt do GetResponse
-        $payload = [
-            'email' => $email,
-            'name' => $contact['NAME'] ?? '',
-            'campaign' => ['campaignId' => $listId]
-        ];
-        $ch = curl_init('https://api.getresponse.com/v3/contacts');
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/json',
-            'X-Auth-Token: api-key ' . $apiKey
-        ]);
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        if ($httpCode === 202) {
-            $addedToGR++;
-            // Aktualizuj ORIGIN_ID w Bitrix24
-            $responseData = json_decode($response, true);
-            if (!empty($responseData['contactId'])) {
-                CRest::call('crm.contact.update', [
-                    'id' => $contact['ID'],
-                    'fields' => [
-                        'ORIGIN_ID' => $responseData['contactId'],
-                        'ORIGINATOR_ID' => 'getresponse',
-                        'ORIGIN_VERSION' => date('Y-m-d H:i:s')
-                    ]
-                ]);
-            }
-        }
-        $count++;
-        usleep(500000); // 0.5s dla limitu GetResponse
-    }
-
-    // --- Synchronizacja GetResponse -> Bitrix24 ---
+    // --- Pobierz istniejące kontakty z Bitrix24 (po emailu) ---
     $bitrixEmails = [];
     $bitrixMap = [];
-    foreach ($bitrixContacts as $c) {
-        $email = strtolower($c['EMAIL'][0]['VALUE'] ?? '');
-        if ($email) {
-            $bitrixEmails[] = $email;
-            $bitrixMap[$email] = $c;
-        }
-    }
-
-    $addedToB24 = 0;
-    $skippedB24 = 0;
-    $updatedB24 = 0;
-    $count = 0;
-    foreach ($getResponseContacts as $contact) {
-        if ($syncLimit > 0 && $count >= $syncLimit) break;
-        $email = strtolower($contact['email'] ?? '');
-        if (!$email) continue;
-        $exists = in_array($email, $bitrixEmails);
-        if ($exists) {
-            $skippedB24++;
-            // Aktualizuj istniejące jeśli opcja włączona
-            if ($updateExisting) {
-                $b24Contact = $bitrixMap[$email];
-                $update = false;
-                if ($conflictRule === 'getresponse') {
-                    $update = true;
-                } elseif ($conflictRule === 'bitrix') {
-                    $update = false;
-                } elseif ($conflictRule === 'newer') {
-                    $b24Date = isset($b24Contact['DATE_MODIFY']) ? strtotime($b24Contact['DATE_MODIFY']) : 0;
-                    $grDate = isset($contact['changedOn']) ? strtotime($contact['changedOn']) : 0;
-                    $update = $grDate > $b24Date;
-                }
-                if ($update) {
-                    CRest::call('crm.contact.update', [
-                        'id' => $b24Contact['ID'],
-                        'fields' => [
-                            'NAME' => $contact['name'] ?? '',
-                            'ORIGIN_ID' => $contact['contactId'],
-                            'ORIGINATOR_ID' => 'getresponse',
-                            'ORIGIN_VERSION' => date('Y-m-d H:i:s')
-                        ]
-                    ]);
-                    $updatedB24++;
-                }
-            }
-            continue;
-        }
-        // Dodaj kontakt do Bitrix24
-        $result = CRest::call('crm.contact.add', [
-            'fields' => [
-                'NAME' => $contact['name'] ?? '',
-                'EMAIL' => [['VALUE' => $email, 'VALUE_TYPE' => 'WORK']],
-                'ORIGIN_ID' => $contact['contactId'],
-                'ORIGINATOR_ID' => 'getresponse',
-                'ORIGIN_VERSION' => date('Y-m-d H:i:s')
-            ]
-        ]);
-        if (!empty($result['result'])) {
-            $addedToB24++;
-        }
-        $count++;
-        usleep(200000); // 0.2s dla limitu API
-    }
-
-    // Po synchronizacji: pobierz ponownie liczbę kontaktów
-    // Bitrix24
-    $bitrixContactsAfter = [];
     $start = 0;
     do {
         $batch = CRest::call('crm.contact.list', [
             'order' => ['ID' => 'ASC'],
-            'filter' => ['!EMAIL' => false],
-            'select' => ['ID'],
+            'select' => ['ID', 'NAME', 'EMAIL', 'ORIGIN_ID', 'ORIGINATOR_ID', 'ORIGIN_VERSION'],
+            'filter' => ['HAS_EMAIL' => 'Y'],
             'start' => $start
         ]);
         if (!empty($batch['result'])) {
-            $bitrixContactsAfter = array_merge($bitrixContactsAfter, $batch['result']);
+            foreach ($batch['result'] as $c) {
+                $emails = $c['EMAIL'] ?? [];
+                foreach ($emails as $em) {
+                    $email = strtolower($em['VALUE']);
+                    if ($email) {
+                        $bitrixEmails[] = $email;
+                        $bitrixMap[$email] = $c;
+                    }
+                }
+            }
         }
         $start = $batch['next'] ?? 0;
         sleep(1);
     } while (!empty($batch['result']) && $start > 0);
-    $bitrixCountAfter = count($bitrixContactsAfter);
 
-    // GetResponse
-    $getResponseContactsAfter = [];
-    $page = 1;
-    do {
-        $url = 'https://api.getresponse.com/v3/contacts?query[campaignId]=' . urlencode($listId) . '&perPage=100&page=' . $page;
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'Content-Type: application/json',
-            'X-Auth-Token: api-key ' . $apiKey
-        ]);
-        $response = curl_exec($ch);
-        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        if ($httpCode === 200) {
-            $contacts = json_decode($response, true);
-            if (is_array($contacts) && count($contacts) > 0) {
-                $getResponseContactsAfter = array_merge($getResponseContactsAfter, $contacts);
-                $page++;
-                usleep(500000);
+    // --- Importuj kontakty z GetResponse do Bitrix24 ---
+    $added = 0;
+    $updated = 0;
+    $skipped = 0;
+    foreach ($getResponseContacts as $contact) {
+        $email = strtolower($contact['email'] ?? '');
+        if (!$email) continue;
+        if (isset($bitrixMap[$email])) {
+            // Kontakt istnieje w Bitrix24
+            $b24 = $bitrixMap[$email];
+            // Jeśli dane się zgadzają (np. imię), tylko uzupełnij ORIGIN_*
+            $fieldsToUpdate = [];
+            if (empty($b24['ORIGIN_ID']) || $b24['ORIGIN_ID'] !== $contact['contactId']) {
+                $fieldsToUpdate['ORIGIN_ID'] = $contact['contactId'];
+            }
+            if (empty($b24['ORIGINATOR_ID']) || $b24['ORIGINATOR_ID'] !== 'getresponse') {
+                $fieldsToUpdate['ORIGINATOR_ID'] = 'getresponse';
+            }
+            $fieldsToUpdate['ORIGIN_VERSION'] = date('Y-m-d H:i:s');
+            if (!empty($fieldsToUpdate)) {
+                CRest::call('crm.contact.update', [
+                    'id' => $b24['ID'],
+                    'fields' => $fieldsToUpdate
+                ]);
+                $updated++;
             } else {
-                break;
+                $skipped++;
             }
         } else {
-            break;
+            // Kontakt nie istnieje – dodaj
+            $result = CRest::call('crm.contact.add', [
+                'fields' => [
+                    'NAME' => $contact['name'] ?? '',
+                    'EMAIL' => [['VALUE' => $email, 'VALUE_TYPE' => 'WORK']],
+                    'ORIGIN_ID' => $contact['contactId'],
+                    'ORIGINATOR_ID' => 'getresponse',
+                    'ORIGIN_VERSION' => date('Y-m-d H:i:s')
+                ]
+            ]);
+            if (!empty($result['result'])) {
+                $added++;
+            } else {
+                $skipped++;
+            }
         }
-    } while (true);
-    $getResponseCountAfter = count($getResponseContactsAfter);
+        usleep(200000); // 0.2s dla limitu API
+    }
 
-    // Zapisz wyniki synchronizacji
-    $syncResults = [
-        'bitrix_before' => $bitrixCountBefore,
-        'getresponse_before' => $getResponseCountBefore,
-        'added_to_gr' => $addedToGR,
-        'skipped_gr' => $skippedGR,
-        'updated_gr' => $updatedGR,
-        'added_to_b24' => $addedToB24,
-        'skipped_b24' => $skippedB24,
-        'updated_b24' => $updatedB24,
-        'sync_time' => date('Y-m-d H:i:s')
+    $results = [
+        'imported' => $added,
+        'updated' => $updated,
+        'skipped' => $skipped,
+        'total_getresponse' => count($getResponseContacts),
+        'total_bitrix' => count($bitrixMap)
     ];
 
     // Zapisz logi do CosmosDB
-    $cosmos->insert('sync_logs', [
-        'id' => uniqid('sync_'),
+    $cosmos->insert('import_logs', [
+        'id' => uniqid('import_'),
         'domain' => $domain,
-        'results' => $syncResults,
+        'results' => $results,
         'timestamp' => date('Y-m-d H:i:s')
     ]);
 
-    // Aktualizuj czas ostatniej synchronizacji
-    $cosmos->setLastSyncTime($domain, date('c'));
-
     echo json_encode([
         'success' => true,
-        'results' => $syncResults
+        'results' => $results
     ]);
 } catch (Exception $e) {
     http_response_code(500);
