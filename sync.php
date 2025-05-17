@@ -72,15 +72,28 @@ try {
     // --- Pobierz istniejące kontakty z Bitrix24 (po emailu) ---
     $bitrixEmails = [];
     $bitrixMap = [];
-    $start = 0;
     $allBitrixRaw = [];
+    $webhook = 'https://b24-5xjk9p.bitrix24.com/rest/1/g1l47he2wqigay60/';
+    $start = 0;
     do {
-        $batch = CRest::call('crm.contact.list', [
-            'order' => ['ID' => 'ASC'],
-            'select' => ['ID', 'NAME', 'EMAIL', 'ORIGIN_ID', 'ORIGINATOR_ID', 'ORIGIN_VERSION'],
+        $params = [
             'filter' => ['HAS_EMAIL' => 'Y'],
+            'select' => ['ID', 'NAME', 'EMAIL', 'ORIGIN_ID', 'ORIGINATOR_ID', 'ORIGIN_VERSION'],
+            'order' => ['ID' => 'ASC'],
             'start' => $start
-        ]);
+        ];
+        $url = $webhook . 'crm.contact.list.json';
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($params));
+        $response = curl_exec($ch);
+        $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlError = curl_error($ch);
+        curl_close($ch);
+        $batch = json_decode($response, true);
+        // DEBUG: Zapisz surową odpowiedź batch
+        file_put_contents('bitrix_contacts_debug.txt', "Batch response:\n" . $response . "\n", FILE_APPEND);
         if (!empty($batch['result'])) {
             foreach ($batch['result'] as $c) {
                 $allBitrixRaw[] = $c;
