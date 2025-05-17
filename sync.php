@@ -87,6 +87,8 @@ try {
     foreach ($contactsToFetch as $contactId) {
         $details = CRest::call('crm.contact.get', ['ID' => $contactId]);
         $c = $details['result'] ?? [];
+        // DEBUG: Zapisz szczegóły kontaktu
+        file_put_contents('bitrix_contacts_debug.txt', "Kontakt ID {$contactId}: " . json_encode($c) . "\n", FILE_APPEND);
         $emails = $c['EMAIL'] ?? [];
         if (!empty($emails)) {
             foreach ($emails as $em) {
