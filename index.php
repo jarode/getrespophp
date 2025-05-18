@@ -198,11 +198,12 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                             <form method="post">
                                 <button type="submit" name="bitrix_debug" class="btn btn-primary">Testuj zapytania</button>
                             </form>
+                            <button id="fillAutomationBtn" class="btn btn-success mt-3">Uzupełnij pole automatyzacji</button>
+                            <div id="fillAutomationResult" class="mt-3"></div>
                             <div class="mt-3">
                             <?php
                             if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bitrix_debug'])) {
                                 require_once 'src/BitrixApi/BitrixApiClient.php';
-                                
                                 $api = new BitrixApiClient($license);
                                 $variants = [
                                     'ID only' => [
@@ -236,7 +237,6 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                                         'start' => 0
                                     ]
                                 ];
-                                
                                 echo '<div style="font-family:monospace;background:#f8f8f8;">';
                                 foreach ($variants as $label => $params) {
                                     $response = $api->call('crm.contact.list', $params);
@@ -417,6 +417,35 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
         });
     });
     <?php endif; ?>
+
+    document.getElementById('fillAutomationBtn')?.addEventListener('click', async function() {
+        const btn = this;
+        btn.disabled = true;
+        btn.textContent = 'Uzupełnianie...';
+        const resultDiv = document.getElementById('fillAutomationResult');
+        resultDiv.innerHTML = '';
+        try {
+            const response = await fetch('fill_email_sync_field.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'DOMAIN=' + encodeURIComponent('<?php echo $domain; ?>')
+            });
+            const data = await response.json();
+            if (data.success) {
+                resultDiv.innerHTML = `<div class='alert alert-success'>Zaktualizowano: ${data.updated} / ${data.total}<br>Błędy: ${data.errors.length}</div>`;
+                if (data.errors.length > 0) {
+                    resultDiv.innerHTML += `<pre style='background:#fff;padding:1em;border:1px solid #ccc;'>${JSON.stringify(data.errors, null, 2)}</pre>`;
+                }
+            } else {
+                resultDiv.innerHTML = `<div class='alert alert-danger'>Błąd: ${data.error || 'Nieznany błąd'}</div>`;
+            }
+        } catch (e) {
+            resultDiv.innerHTML = `<div class='alert alert-danger'>Błąd: ${e}</div>`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Uzupełnij pole automatyzacji';
+        }
+    });
 </script>
 </body>
 </html>
