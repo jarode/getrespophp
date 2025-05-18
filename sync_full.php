@@ -35,6 +35,25 @@ if (!$apiKey || !$listId) {
 
 $importLimit = ($status === 'trial') ? 100 : 100000;
 
+function getPrimaryEmail($emails) {
+    foreach ($emails as $em) {
+        if (
+            isset($em['TYPE_ID'], $em['VALUE_TYPE'], $em['VALUE']) &&
+            $em['TYPE_ID'] === 'EMAIL' &&
+            $em['VALUE_TYPE'] === 'WORK' &&
+            !empty($em['VALUE'])
+        ) {
+            return strtolower($em['VALUE']);
+        }
+    }
+    foreach ($emails as $em) {
+        if (!empty($em['VALUE'])) {
+            return strtolower($em['VALUE']);
+        }
+    }
+    return null;
+}
+
 try {
     // --- Pobierz kontakty z Bitrix24 ---
     $bitrixContacts = [];
@@ -42,8 +61,7 @@ try {
     $start = 0;
     do {
         $params = [
-            'filter' => ['HAS_EMAIL' => 'Y'],
-            'select' => ['ID', 'NAME', 'EMAIL', 'ORIGIN_ID', 'ORIGINATOR_ID', 'ORIGIN_VERSION'],
+            'select' => ['ID', 'EMAIL', 'ORIGIN_ID', 'ORIGINATOR_ID', 'ORIGIN_VERSION', 'NAME'],
             'order' => ['ID' => 'ASC'],
             'start' => $start
         ];
@@ -52,11 +70,9 @@ try {
             foreach ($result['result'] as $c) {
                 $bitrixContacts[] = $c;
                 $emails = $c['EMAIL'] ?? [];
-                foreach ($emails as $em) {
-                    $email = strtolower($em['VALUE']);
-                    if ($email) {
-                        $bitrixByEmail[$email] = $c;
-                    }
+                $email = getPrimaryEmail($emails);
+                if ($email) {
+                    $bitrixByEmail[$email] = $c;
                 }
             }
             $start = $result['next'] ?? 0;
@@ -107,7 +123,6 @@ try {
     $addedToGR = 0;
     $updatedOriginInB24 = 0;
     $addedToB24 = 0;
-    $updatedOriginInB24FromGR = 0;
     $errors = [];
 
     // --- Bitrix24 -> GetResponse ---
