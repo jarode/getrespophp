@@ -97,6 +97,15 @@ try {
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
         if ($httpCode === 200) {
+            $cosmos->insert('api_logs', [
+                'id' => uniqid('gr_'),
+                'domain' => $domain,
+                'endpoint' => 'getresponse_contacts',
+                'request' => $url,
+                'response' => $response,
+                'http_code' => $httpCode,
+                'timestamp' => date('Y-m-d H:i:s')
+            ]);
             $contacts = json_decode($response, true);
             if (is_array($contacts) && count($contacts) > 0) {
                 foreach ($contacts as $contact) {
@@ -169,6 +178,16 @@ try {
             $curlError = curl_error($ch);
             curl_close($ch);
             if ($httpCode === 202 || $httpCode === 200) {
+                $cosmos->insert('api_logs', [
+                    'id' => uniqid('gr_'),
+                    'domain' => $domain,
+                    'endpoint' => 'getresponse_add_contact',
+                    'request' => json_encode($payload),
+                    'response' => $response,
+                    'http_code' => $httpCode,
+                    'error' => $curlError,
+                    'timestamp' => date('Y-m-d H:i:s')
+                ]);
                 $contactGR = json_decode($response, true);
                 $contactId = $contactGR['contactId'] ?? null;
                 if ($contactId) {
