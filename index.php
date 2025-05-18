@@ -200,6 +200,8 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                             </form>
                             <button id="fillAutomationBtn" class="btn btn-success mt-3">Uzupełnij pole automatyzacji</button>
                             <div id="fillAutomationResult" class="mt-3"></div>
+                            <button id="testUpdateOriginBtn" class="btn btn-warning mt-3">Testuj update ORIGIN_*</button>
+                            <div id="testUpdateOriginResult" class="mt-3"></div>
                             <div class="mt-3">
                             <?php
                             if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bitrix_debug'])) {
@@ -455,6 +457,47 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
         } finally {
             btn.disabled = false;
             btn.textContent = 'Uzupełnij pole automatyzacji';
+        }
+    });
+
+    document.getElementById('testUpdateOriginBtn')?.addEventListener('click', async function() {
+        const btn = this;
+        btn.disabled = true;
+        btn.textContent = 'Aktualizowanie...';
+        const resultDiv = document.getElementById('testUpdateOriginResult');
+        resultDiv.innerHTML = '';
+        try {
+            // Pobierz pierwszy kontakt
+            const listResp = await fetch('test_update_origin.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'DOMAIN=' + encodeURIComponent('<?php echo $domain; ?>') + '&action=get_first'
+            });
+            const listData = await listResp.json();
+            if (!listData.success || !listData.contact) {
+                resultDiv.innerHTML = `<div class='alert alert-danger'>Błąd pobierania kontaktu: ${listData.error || 'Brak kontaktu'}</div>`;
+                btn.disabled = false;
+                btn.textContent = 'Testuj update ORIGIN_*';
+                return;
+            }
+            const contact = listData.contact;
+            // Wywołaj update ORIGIN_*
+            const updateResp = await fetch('test_update_origin.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'DOMAIN=' + encodeURIComponent('<?php echo $domain; ?>') + '&action=update&id=' + encodeURIComponent(contact.ID)
+            });
+            const updateData = await updateResp.json();
+            resultDiv.innerHTML = `<div class='alert alert-info'>Odpowiedź API na update:<br><pre>${JSON.stringify(updateData.update_response, null, 2)}</pre></div>`;
+            // Pobierz ponownie kontakt
+            if (updateData.contact_after) {
+                resultDiv.innerHTML += `<div class='alert alert-success'>Kontakt po update:<br><pre>${JSON.stringify(updateData.contact_after, null, 2)}</pre></div>`;
+            }
+        } catch (e) {
+            resultDiv.innerHTML = `<div class='alert alert-danger'>Błąd: ${e}</div>`;
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Testuj update ORIGIN_*';
         }
     });
 </script>
