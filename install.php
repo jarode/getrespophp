@@ -21,6 +21,30 @@ $result = CRest::call(
 
 CRest::setLog(['lead_add' => $result], 'installation');
 
+// Dodaj pole niestandardowe do kontaktów (jeśli nie istnieje)
+$userFields = CRest::call('crm.contact.userfield.list', [
+    'filter' => ['FIELD_NAME' => 'UF_CRM_EMAIL_SYNC_AUTOMATION']
+]);
+if (empty($userFields['result'])) {
+    $addFieldResult = CRest::call('crm.contact.userfield.add', [
+        'fields' => [
+            'FIELD_NAME' => 'UF_CRM_EMAIL_SYNC_AUTOMATION',
+            'EDIT_FORM_LABEL' => ['pl' => 'Email Sync Automation', 'en' => 'Email Sync Automation'],
+            'LIST_COLUMN_LABEL' => ['pl' => 'Email Sync Automation', 'en' => 'Email Sync Automation'],
+            'USER_TYPE_ID' => 'string',
+            'XML_ID' => 'EMAIL_SYNC_AUTOMATION',
+            'SORT' => 1000,
+            'MULTIPLE' => 'N',
+            'MANDATORY' => 'N',
+            'SHOW_FILTER' => 'Y',
+            'SHOW_IN_LIST' => 'N',
+            'EDIT_IN_LIST' => 'Y',
+            'IS_SEARCHABLE' => 'Y'
+        ]
+    ]);
+    CRest::setLog(['add_userfield' => $addFieldResult], 'installation');
+}
+
 if($install_result['rest_only'] === false):?>
 <head>
 	<script src="//api.bitrix24.com/api/v1/"></script>
