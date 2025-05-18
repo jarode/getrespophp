@@ -248,6 +248,12 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                                         'filter' => [],
                                         'order' => ['ID' => 'ASC'],
                                         'start' => 0
+                                    ],
+                                    'FULL contact list (select: ID, EMAIL, UF_CRM_EMAIL_SYNC_AUTOMATION, ORIGIN_ID, ORIGINATOR_ID, ORIGIN_VERSION)' => [
+                                        'select' => ['ID', 'EMAIL', 'UF_CRM_EMAIL_SYNC_AUTOMATION', 'ORIGIN_ID', 'ORIGINATOR_ID', 'ORIGIN_VERSION'],
+                                        'filter' => [],
+                                        'order' => ['ID' => 'ASC'],
+                                        'start' => 0
                                     ]
                                 ];
                                 echo '<div style="font-family:monospace;background:#f8f8f8;">';
