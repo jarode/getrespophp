@@ -112,7 +112,7 @@ class BitrixApiClient {
         if ($this->lastRequestTime > 0) {
             $timeSinceLastRequest = microtime(true) - $this->lastRequestTime;
             if ($timeSinceLastRequest < $this->delay) {
-                usleep(($this->delay - $timeSinceLastRequest) * 1000000);
+                usleep((int)(($this->delay - $timeSinceLastRequest) * 1000000));
             }
         }
     }
