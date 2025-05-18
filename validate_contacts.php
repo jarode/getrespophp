@@ -26,6 +26,25 @@ if (!$apiKey || !$listId) {
     exit;
 }
 
+function getPrimaryEmail($emails) {
+    foreach ($emails as $em) {
+        if (
+            isset($em['TYPE_ID'], $em['VALUE_TYPE'], $em['VALUE']) &&
+            $em['TYPE_ID'] === 'EMAIL' &&
+            $em['VALUE_TYPE'] === 'WORK' &&
+            !empty($em['VALUE'])
+        ) {
+            return strtolower($em['VALUE']);
+        }
+    }
+    foreach ($emails as $em) {
+        if (!empty($em['VALUE'])) {
+            return strtolower($em['VALUE']);
+        }
+    }
+    return null;
+}
+
 try {
     // --- Pobierz kontakty z GetResponse ---
     $getResponseContacts = [];
@@ -35,7 +54,8 @@ try {
         'with_email' => 0,
         'with_name' => 0,
         'with_both' => 0,
-        'errors' => []
+        'errors' => [],
+        'raw_response' => [] // Dodajemy surowe odpowiedzi do debugowania
     ];
 
     do {
@@ -49,6 +69,13 @@ try {
         $response = curl_exec($ch);
         $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+
+        // Zapisz surową odpowiedź
+        $getResponseStats['raw_response'][] = [
+            'page' => $page,
+            'http_code' => $httpCode,
+            'response' => $response
+        ];
 
         if ($httpCode === 200) {
             $contacts = json_decode($response, true);
@@ -106,26 +133,34 @@ try {
         'with_name' => 0,
         'with_both' => 0,
         'with_origin' => 0,
-        'errors' => []
+        'errors' => [],
+        'raw_response' => [] // Dodajemy surowe odpowiedzi do debugowania
     ];
 
     $start = 0;
     do {
         $params = [
-            'filter' => ['HAS_EMAIL' => 'Y'],
-            'select' => ['ID', 'NAME', 'EMAIL', 'ORIGIN_ID', 'ORIGINATOR_ID', 'ORIGIN_VERSION'],
+            'select' => ['ID', 'EMAIL', 'ORIGIN_ID', 'ORIGINATOR_ID', 'ORIGIN_VERSION', 'NAME'],
             'order' => ['ID' => 'ASC'],
             'start' => $start
         ];
         
         $result = CRest::call('crm.contact.list', $params);
         
+        // Zapisz surową odpowiedź
+        $bitrixStats['raw_response'][] = [
+            'start' => $start,
+            'response' => $result
+        ];
+        
         if (!empty($result['result'])) {
             foreach ($result['result'] as $contact) {
                 $bitrixStats['total']++;
                 
                 // Walidacja email
-                $hasEmail = !empty($contact['EMAIL']);
+                $emails = $contact['EMAIL'] ?? [];
+                $email = getPrimaryEmail($emails);
+                $hasEmail = !empty($email);
                 if ($hasEmail) {
                     $bitrixStats['with_email']++;
                 }
@@ -147,16 +182,12 @@ try {
                 }
                 
                 // Sprawdź poprawność email
-                if ($hasEmail) {
-                    foreach ($contact['EMAIL'] as $email) {
-                        if (!filter_var($email['VALUE'], FILTER_VALIDATE_EMAIL)) {
-                            $bitrixStats['errors'][] = [
-                                'type' => 'invalid_email',
-                                'contact_id' => $contact['ID'],
-                                'email' => $email['VALUE']
-                            ];
-                        }
-                    }
+                if ($hasEmail && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $bitrixStats['errors'][] = [
+                        'type' => 'invalid_email',
+                        'contact_id' => $contact['ID'],
+                        'email' => $email
+                    ];
                 }
             }
         }
