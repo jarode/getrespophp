@@ -201,7 +201,9 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                             <div class="mt-3">
                             <?php
                             if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bitrix_debug'])) {
-                                require_once 'crest.php';
+                                require_once 'src/BitrixApi/BitrixApiClient.php';
+                                
+                                $api = new BitrixApiClient($license);
                                 $variants = [
                                     'ID only' => [
                                         'select' => ['ID'],
@@ -234,9 +236,10 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                                         'start' => 0
                                     ]
                                 ];
+                                
                                 echo '<div style="font-family:monospace;background:#f8f8f8;">';
                                 foreach ($variants as $label => $params) {
-                                    $response = CRest::call('crm.contact.list', $params);
+                                    $response = $api->call('crm.contact.list', $params);
                                     echo '<h6>' . htmlspecialchars($label) . '</h6>';
                                     echo '<pre style="background:#fff;padding:1em;border:1px solid #ccc;">' . htmlspecialchars(json_encode($response, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE)) . '</pre>';
                                 }

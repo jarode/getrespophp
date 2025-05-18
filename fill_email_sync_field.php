@@ -2,73 +2,77 @@
 // fill_email_sync_field.php
 // Masowe uzupełnianie pola UF_CRM_EMAIL_SYNC_AUTOMATION w kontaktach Bitrix24 przez crest.php
 
-$domain = 'https://b24-5xjk9p.bitrix24.com/'; // jawnie ustawiona domena do testów
+require_once 'src/BitrixApi/BitrixApiClient.php';
+require_once 'cosmos.php';
 
-// Funkcja do wywoływania crest.php przez HTTP
-function callCrest($method, $params = []) {
-    $url = 'https://bitrix-php-app.nicetree-ab137c51.westeurope.azurecontainerapps.io/crest.php';
-    $payload = [
-        'method' => $method,
-        'params' => $params
-    ];
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'Content-Type: application/json'
-    ]);
-    $response = curl_exec($ch);
-    curl_close($ch);
-    return json_decode($response, true);
+header('Content-Type: application/json');
+
+$domain = $_REQUEST['DOMAIN'] ?? null;
+if (!$domain) {
+    http_response_code(400);
+    echo json_encode(['success' => false, 'error' => 'Domain is required']);
+    exit;
 }
 
-$updated = 0;
-$checked = 0;
-$start = 0;
-do {
-    $batch = callCrest('crm.contact.list', [
-        'select' => ['ID', 'UF_CRM_EMAIL_SYNC_AUTOMATION'],
-        'filter' => ['UF_CRM_EMAIL_SYNC_AUTOMATION' => ''],
-        'order' => ['ID' => 'ASC'],
-        'start' => $start
-    ]);
-    // DEBUG: Zapisz odpowiedź batch do pliku
-    file_put_contents('fill_email_sync_field_debug.txt', "Batch response (start=$start):\n" . json_encode($batch, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND);
-    if (!empty($batch['result'])) {
-        foreach ($batch['result'] as $contact) {
-            $checked++;
-            $emailField = $contact['UF_CRM_EMAIL_SYNC_AUTOMATION'] ?? '';
-            if (empty($emailField)) {
-                // Pobierz szczegóły kontaktu
-                $details = callCrest('crm.contact.get', ['ID' => $contact['ID']]);
-                $c = $details['result'] ?? [];
-                $emails = $c['EMAIL'] ?? [];
-                $mainEmail = '';
-                if (!empty($emails) && isset($emails[0]['VALUE'])) {
-                    $mainEmail = $emails[0]['VALUE'];
-                }
-                if ($mainEmail) {
-                    $res = callCrest('crm.contact.update', [
-                        'id' => $contact['ID'],
-                        'fields' => [
-                            'UF_CRM_EMAIL_SYNC_AUTOMATION' => $mainEmail
-                        ]
-                    ]);
+$cosmos = new CosmosDB();
+$settings = $cosmos->getSettings($domain);
+$license = $cosmos->getLicenseStatus($domain);
+$status = strtolower($license['license_status'] ?? 'trial');
+
+// Określ plan na podstawie statusu licencji
+$plan = 'start'; // domyślnie start
+if ($status === 'active') {
+    $plan = 'professional'; // zakładamy, że aktywna licencja = professional
+}
+
+try {
+    $api = new BitrixApiClient($license);
+    
+    // Pobierz kontakty bez pola automatyzacji
+    $contacts = $api->getContacts(
+        ['UF_CRM_EMAIL_SYNC_AUTOMATION' => ''],
+        ['ID', 'NAME', 'EMAIL', 'UF_CRM_EMAIL_SYNC_AUTOMATION']
+    );
+    
+    $updated = 0;
+    $errors = [];
+    
+    // Aktualizuj kontakty w batchu
+    foreach ($contacts as $contact) {
+        $emails = $contact['EMAIL'] ?? [];
+        if (!empty($emails)) {
+            $email = strtolower($emails[0]['VALUE'] ?? '');
+            if ($email) {
+                $result = $api->call('crm.contact.update', [
+                    'id' => $contact['ID'],
+                    'fields' => [
+                        'UF_CRM_EMAIL_SYNC_AUTOMATION' => $email
+                    ]
+                ]);
+                
+                if (!empty($result['result'])) {
                     $updated++;
+                } else {
+                    $errors[] = [
+                        'id' => $contact['ID'],
+                        'error' => $result['error'] ?? 'Unknown error'
+                    ];
                 }
             }
         }
     }
-    $start = $batch['next'] ?? 0;
-    sleep(1);
-} while (!empty($batch['result']) && $start > 0);
-
-// Wynik
-header('Content-Type: application/json');
-echo json_encode([
-    'checked' => $checked,
-    'updated' => $updated,
-    'success' => true,
-    'last_batch' => $batch // pokaż ostatnią odpowiedź batch
-], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE); 
+    
+    echo json_encode([
+        'success' => true,
+        'updated' => $updated,
+        'errors' => $errors,
+        'total' => count($contacts)
+    ]);
+    
+} catch (Exception $e) {
+    http_response_code(500);
+    echo json_encode([
+        'success' => false,
+        'error' => $e->getMessage()
+    ]);
+} 
