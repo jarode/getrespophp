@@ -8,7 +8,7 @@ $handlerBackUrl = ($_SERVER['HTTPS'] === 'on' || $_SERVER['SERVER_PORT'] === '44
 	. $_SERVER['SERVER_NAME']
 	. (in_array($_SERVER['SERVER_PORT'],	['80', '443'], true) ? '' : ':' . $_SERVER['SERVER_PORT'])
 	. str_replace($_SERVER['DOCUMENT_ROOT'], '',__DIR__)
-	. '/handler.php?v2';
+	. '/handler.php?v=2';
 
 $result = CRest::call(
 	'event.bind',
