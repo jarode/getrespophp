@@ -203,70 +203,35 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                             <button id="testUpdateOriginBtn" class="btn btn-warning mt-3">Testuj update ORIGIN_*</button>
                             <div id="testUpdateOriginResult" class="mt-3"></div>
                             <button id="validateContactsBtn" class="btn btn-info mt-3">Waliduj kontakty</button>
-                            <div id="validateContactsResult" class="mt-3"></div>
-                            <div class="mt-3">
-                            <?php
-                            if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bitrix_debug'])) {
-                                require_once 'src/BitrixApi/BitrixApiClient.php';
-                                $api = new BitrixApiClient($license);
-                                $variants = [
-                                    'ID only' => [
-                                        'select' => ['ID'],
-                                        'filter' => [],
-                                        'order' => ['ID' => 'ASC'],
-                                        'start' => 0
-                                    ],
-                                    'ID + automation' => [
-                                        'select' => ['ID', 'UF_CRM_EMAIL_SYNC_AUTOMATION'],
-                                        'filter' => [],
-                                        'order' => ['ID' => 'ASC'],
-                                        'start' => 0
-                                    ],
-                                    'ID + automation, filter empty' => [
-                                        'select' => ['ID', 'UF_CRM_EMAIL_SYNC_AUTOMATION'],
-                                        'filter' => ['UF_CRM_EMAIL_SYNC_AUTOMATION' => ''],
-                                        'order' => ['ID' => 'ASC'],
-                                        'start' => 0
-                                    ],
-                                    'ID + NAME' => [
-                                        'select' => ['ID', 'NAME'],
-                                        'filter' => [],
-                                        'order' => ['ID' => 'ASC'],
-                                        'start' => 0
-                                    ],
-                                    'ID + automation, filter not empty' => [
-                                        'select' => ['ID', 'UF_CRM_EMAIL_SYNC_AUTOMATION'],
-                                        'filter' => ['!UF_CRM_EMAIL_SYNC_AUTOMATION' => ''],
-                                        'order' => ['ID' => 'ASC'],
-                                        'start' => 0
-                                    ],
-                                    'FULL contact list (no select)' => [
-                                        'filter' => [],
-                                        'order' => ['ID' => 'ASC'],
-                                        'start' => 0
-                                    ],
-                                    'FULL contact list (all fields)' => [
-                                        'select' => ['*'],
-                                        'filter' => [],
-                                        'order' => ['ID' => 'ASC'],
-                                        'start' => 0
-                                    ],
-                                    'FULL contact list (select: ID, EMAIL, UF_CRM_EMAIL_SYNC_AUTOMATION, ORIGIN_ID, ORIGINATOR_ID, ORIGIN_VERSION)' => [
-                                        'select' => ['ID', 'EMAIL', 'UF_CRM_EMAIL_SYNC_AUTOMATION', 'ORIGIN_ID', 'ORIGINATOR_ID', 'ORIGIN_VERSION'],
-                                        'filter' => [],
-                                        'order' => ['ID' => 'ASC'],
-                                        'start' => 0
-                                    ]
-                                ];
-                                echo '<div style="font-family:monospace;background:#f8f8f8;">';
-                                foreach ($variants as $label => $params) {
-                                    $response = $api->call('crm.contact.list', $params);
-                                    echo '<h6>' . htmlspecialchars($label) . '</h6>';
-                                    echo '<pre style="background:#fff;padding:1em;border:1px solid #ccc;">' . htmlspecialchars(json_encode($response, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE)) . '</pre>';
-                                }
-                                echo '</div>';
-                            }
-                            ?>
+                            <div id="validationResults" class="mt-3"></div>
+                            <div id="rawResponses" class="mt-3" style="display: none;">
+                                <h6 class="mt-4">Surowe odpowiedzi z API:</h6>
+                                <div class="accordion" id="rawResponsesAccordion">
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#getResponseRaw" aria-expanded="false" aria-controls="getResponseRaw">
+                                                GetResponse API Responses
+                                            </button>
+                                        </h2>
+                                        <div id="getResponseRaw" class="accordion-collapse collapse" data-bs-parent="#rawResponsesAccordion">
+                                            <div class="accordion-body">
+                                                <pre id="getResponseRawContent" class="bg-light p-3" style="max-height: 400px; overflow-y: auto;"></pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#bitrixRaw" aria-expanded="false" aria-controls="bitrixRaw">
+                                                Bitrix24 API Responses
+                                            </button>
+                                        </h2>
+                                        <div id="bitrixRaw" class="accordion-collapse collapse" data-bs-parent="#rawResponsesAccordion">
+                                            <div class="accordion-body">
+                                                <pre id="bitrixRawContent" class="bg-light p-3" style="max-height: 400px; overflow-y: auto;"></pre>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -511,58 +476,72 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
 
     // Dodaj obsługę walidacji kontaktów
     document.getElementById('validateContactsBtn').addEventListener('click', function() {
-        const resultDiv = document.getElementById('validateContactsResult');
-        resultDiv.innerHTML = '<div class="alert alert-info">Walidacja w toku...</div>';
-        
+        const resultsDiv = document.getElementById('validationResults');
+        const rawResponsesDiv = document.getElementById('rawResponses');
+        resultsDiv.innerHTML = '<div class="alert alert-info">Walidacja w toku...</div>';
+        rawResponsesDiv.style.display = 'none';
+
         fetch('validate_contacts.php', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                DOMAIN: '<?php echo htmlspecialchars($domain); ?>'
+                DOMAIN: '<?php echo $domain; ?>'
             })
         })
         .then(response => response.json())
         .then(data => {
             if (data.success) {
                 let html = '<div class="card">';
-                
-                // GetResponse stats
                 html += '<div class="card-header bg-primary text-white">GetResponse</div>';
                 html += '<div class="card-body">';
-                html += '<ul class="list-group list-group-flush">';
-                html += `<li class="list-group-item">Łączna liczba kontaktów: ${data.getresponse.total}</li>`;
-                html += `<li class="list-group-item">Kontakty z email: ${data.getresponse.with_email}</li>`;
-                html += `<li class="list-group-item">Kontakty z imieniem: ${data.getresponse.with_name}</li>`;
-                html += `<li class="list-group-item">Kontakty z email i imieniem: ${data.getresponse.with_both}</li>`;
+                html += `<p>Łączna liczba kontaktów: ${data.getresponse.total}</p>`;
+                html += `<p>Kontakty z email: ${data.getresponse.with_email}</p>`;
+                html += `<p>Kontakty z imieniem: ${data.getresponse.with_name}</p>`;
+                html += `<p>Kontakty z email i imieniem: ${data.getresponse.with_both}</p>`;
                 if (data.getresponse.errors.length > 0) {
-                    html += '<li class="list-group-item text-danger">Błędy: ' + data.getresponse.errors.length + '</li>';
+                    html += '<div class="alert alert-warning">';
+                    html += '<h6>Błędy:</h6>';
+                    html += '<ul>';
+                    data.getresponse.errors.forEach(error => {
+                        html += `<li>${error.type}: ${JSON.stringify(error)}</li>`;
+                    });
+                    html += '</ul></div>';
                 }
-                html += '</ul></div>';
-                
-                // Bitrix24 stats
-                html += '<div class="card-header bg-primary text-white mt-3">Bitrix24</div>';
+                html += '</div></div>';
+
+                html += '<div class="card mt-3">';
+                html += '<div class="card-header bg-primary text-white">Bitrix24</div>';
                 html += '<div class="card-body">';
-                html += '<ul class="list-group list-group-flush">';
-                html += `<li class="list-group-item">Łączna liczba kontaktów: ${data.bitrix.total}</li>`;
-                html += `<li class="list-group-item">Kontakty z email: ${data.bitrix.with_email}</li>`;
-                html += `<li class="list-group-item">Kontakty z imieniem: ${data.bitrix.with_name}</li>`;
-                html += `<li class="list-group-item">Kontakty z email i imieniem: ${data.bitrix.with_both}</li>`;
-                html += `<li class="list-group-item">Kontakty z ORIGIN_*: ${data.bitrix.with_origin}</li>`;
+                html += `<p>Łączna liczba kontaktów: ${data.bitrix.total}</p>`;
+                html += `<p>Kontakty z email: ${data.bitrix.with_email}</p>`;
+                html += `<p>Kontakty z imieniem: ${data.bitrix.with_name}</p>`;
+                html += `<p>Kontakty z email i imieniem: ${data.bitrix.with_both}</p>`;
+                html += `<p>Kontakty z ORIGIN_*: ${data.bitrix.with_origin}</p>`;
                 if (data.bitrix.errors.length > 0) {
-                    html += '<li class="list-group-item text-danger">Błędy: ' + data.bitrix.errors.length + '</li>';
+                    html += '<div class="alert alert-warning">';
+                    html += '<h6>Błędy:</h6>';
+                    html += '<ul>';
+                    data.bitrix.errors.forEach(error => {
+                        html += `<li>${error.type}: ${JSON.stringify(error)}</li>`;
+                    });
+                    html += '</ul></div>';
                 }
-                html += '</ul></div>';
-                
-                html += '</div>';
-                resultDiv.innerHTML = html;
+                html += '</div></div>';
+
+                resultsDiv.innerHTML = html;
+
+                // Wyświetl surowe odpowiedzi
+                rawResponsesDiv.style.display = 'block';
+                document.getElementById('getResponseRawContent').textContent = JSON.stringify(data.getresponse.raw_response, null, 2);
+                document.getElementById('bitrixRawContent').textContent = JSON.stringify(data.bitrix.raw_response, null, 2);
             } else {
-                resultDiv.innerHTML = `<div class="alert alert-danger">Błąd: ${data.error}</div>`;
+                resultsDiv.innerHTML = `<div class="alert alert-danger">Błąd: ${data.error}</div>`;
             }
         })
         .catch(error => {
-            resultDiv.innerHTML = `<div class="alert alert-danger">Błąd: ${error.message}</div>`;
+            resultsDiv.innerHTML = `<div class="alert alert-danger">Błąd: ${error.message}</div>`;
         });
     });
 </script>
