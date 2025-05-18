@@ -2,6 +2,8 @@
 // fill_email_sync_field.php
 // Masowe uzupełnianie pola UF_CRM_EMAIL_SYNC_AUTOMATION w kontaktach Bitrix24 przez crest.php
 
+$domain = 'https://b24-5xjk9p.bitrix24.com/'; // jawnie ustawiona domena do testów
+
 // Funkcja do wywoływania crest.php przez HTTP
 function callCrest($method, $params = []) {
     $url = 'https://bitrix-php-app.nicetree-ab137c51.westeurope.azurecontainerapps.io/crest.php';
@@ -26,11 +28,13 @@ $checked = 0;
 $start = 0;
 do {
     $batch = callCrest('crm.contact.list', [
-        'order' => ['ID' => 'ASC'],
         'select' => ['ID', 'UF_CRM_EMAIL_SYNC_AUTOMATION'],
-        'filter' => [],
+        'filter' => ['UF_CRM_EMAIL_SYNC_AUTOMATION' => ''],
+        'order' => ['ID' => 'ASC'],
         'start' => $start
     ]);
+    // DEBUG: Zapisz odpowiedź batch do pliku
+    file_put_contents('fill_email_sync_field_debug.txt', "Batch response (start=$start):\n" . json_encode($batch, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND);
     if (!empty($batch['result'])) {
         foreach ($batch['result'] as $contact) {
             $checked++;
@@ -65,5 +69,6 @@ header('Content-Type: application/json');
 echo json_encode([
     'checked' => $checked,
     'updated' => $updated,
-    'success' => true
+    'success' => true,
+    'last_batch' => $batch // pokaż ostatnią odpowiedź batch
 ], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE); 

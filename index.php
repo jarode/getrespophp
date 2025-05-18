@@ -94,6 +94,9 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                         <li class="nav-item" role="presentation">
                             <button class="nav-link" id="help-tab" data-bs-toggle="tab" data-bs-target="#help" type="button" role="tab" aria-controls="help" aria-selected="false">Help</button>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="bitrixdebug-tab" data-bs-toggle="tab" data-bs-target="#bitrixdebug" type="button" role="tab" aria-controls="bitrixdebug" aria-selected="false">Bitrix Debug</button>
+                        </li>
                     </ul>
                     <div class="tab-content" id="myTabContent">
                         <div class="tab-pane fade show active" id="dashboard" role="tabpanel" aria-labelledby="dashboard-tab">
@@ -189,6 +192,58 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                                 <li>Użyj przycisku <b>Start synchronization</b> w zakładce <b>Synchronization</b> (dostępne tylko z aktywną licencją lub w okresie trial).</li>
                                 <li>W razie problemów z płatnością lub licencją, skontaktuj się z supportem.</li>
                             </ol>
+                        </div>
+                        <div class="tab-pane fade" id="bitrixdebug" role="tabpanel" aria-labelledby="bitrixdebug-tab">
+                            <h5>Test zapytań crm.contact.list (Bitrix24)</h5>
+                            <form method="post">
+                                <button type="submit" name="bitrix_debug" class="btn btn-primary">Testuj zapytania</button>
+                            </form>
+                            <div class="mt-3">
+                            <?php
+                            if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bitrix_debug'])) {
+                                require_once 'crest.php';
+                                $variants = [
+                                    'ID only' => [
+                                        'select' => ['ID'],
+                                        'filter' => [],
+                                        'order' => ['ID' => 'ASC'],
+                                        'start' => 0
+                                    ],
+                                    'ID + automation' => [
+                                        'select' => ['ID', 'UF_CRM_EMAIL_SYNC_AUTOMATION'],
+                                        'filter' => [],
+                                        'order' => ['ID' => 'ASC'],
+                                        'start' => 0
+                                    ],
+                                    'ID + automation, filter empty' => [
+                                        'select' => ['ID', 'UF_CRM_EMAIL_SYNC_AUTOMATION'],
+                                        'filter' => ['UF_CRM_EMAIL_SYNC_AUTOMATION' => ''],
+                                        'order' => ['ID' => 'ASC'],
+                                        'start' => 0
+                                    ],
+                                    'ID + NAME' => [
+                                        'select' => ['ID', 'NAME'],
+                                        'filter' => [],
+                                        'order' => ['ID' => 'ASC'],
+                                        'start' => 0
+                                    ],
+                                    'ID + automation, filter not empty' => [
+                                        'select' => ['ID', 'UF_CRM_EMAIL_SYNC_AUTOMATION'],
+                                        'filter' => ['!UF_CRM_EMAIL_SYNC_AUTOMATION' => ''],
+                                        'order' => ['ID' => 'ASC'],
+                                        'start' => 0
+                                    ]
+                                ];
+                                echo '<div style="font-family:monospace;background:#f8f8f8;">';
+                                foreach ($variants as $label => $params) {
+                                    $response = CRest::call('crm.contact.list', $params);
+                                    echo '<h6>' . htmlspecialchars($label) . '</h6>';
+                                    echo '<pre style="background:#fff;padding:1em;border:1px solid #ccc;">' . htmlspecialchars(json_encode($response, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE)) . '</pre>';
+                                }
+                                echo '</div>';
+                            }
+                            ?>
+                            </div>
                         </div>
                     </div>
                 </div>
