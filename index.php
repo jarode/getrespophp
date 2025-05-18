@@ -202,6 +202,8 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
                             <div id="fillAutomationResult" class="mt-3"></div>
                             <button id="testUpdateOriginBtn" class="btn btn-warning mt-3">Testuj update ORIGIN_*</button>
                             <div id="testUpdateOriginResult" class="mt-3"></div>
+                            <button id="validateContactsBtn" class="btn btn-info mt-3">Waliduj kontakty</button>
+                            <div id="validateContactsResult" class="mt-3"></div>
                             <div class="mt-3">
                             <?php
                             if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['bitrix_debug'])) {
@@ -505,6 +507,63 @@ $canPay = in_array($status, ['trial', 'expired', 'inactive', 'pending']) || ($ex
             btn.disabled = false;
             btn.textContent = 'Testuj update ORIGIN_*';
         }
+    });
+
+    // Dodaj obsługę walidacji kontaktów
+    document.getElementById('validateContactsBtn').addEventListener('click', function() {
+        const resultDiv = document.getElementById('validateContactsResult');
+        resultDiv.innerHTML = '<div class="alert alert-info">Walidacja w toku...</div>';
+        
+        fetch('validate_contacts.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                DOMAIN: '<?php echo htmlspecialchars($domain); ?>'
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                let html = '<div class="card">';
+                
+                // GetResponse stats
+                html += '<div class="card-header bg-primary text-white">GetResponse</div>';
+                html += '<div class="card-body">';
+                html += '<ul class="list-group list-group-flush">';
+                html += `<li class="list-group-item">Łączna liczba kontaktów: ${data.getresponse.total}</li>`;
+                html += `<li class="list-group-item">Kontakty z email: ${data.getresponse.with_email}</li>`;
+                html += `<li class="list-group-item">Kontakty z imieniem: ${data.getresponse.with_name}</li>`;
+                html += `<li class="list-group-item">Kontakty z email i imieniem: ${data.getresponse.with_both}</li>`;
+                if (data.getresponse.errors.length > 0) {
+                    html += '<li class="list-group-item text-danger">Błędy: ' + data.getresponse.errors.length + '</li>';
+                }
+                html += '</ul></div>';
+                
+                // Bitrix24 stats
+                html += '<div class="card-header bg-primary text-white mt-3">Bitrix24</div>';
+                html += '<div class="card-body">';
+                html += '<ul class="list-group list-group-flush">';
+                html += `<li class="list-group-item">Łączna liczba kontaktów: ${data.bitrix.total}</li>`;
+                html += `<li class="list-group-item">Kontakty z email: ${data.bitrix.with_email}</li>`;
+                html += `<li class="list-group-item">Kontakty z imieniem: ${data.bitrix.with_name}</li>`;
+                html += `<li class="list-group-item">Kontakty z email i imieniem: ${data.bitrix.with_both}</li>`;
+                html += `<li class="list-group-item">Kontakty z ORIGIN_*: ${data.bitrix.with_origin}</li>`;
+                if (data.bitrix.errors.length > 0) {
+                    html += '<li class="list-group-item text-danger">Błędy: ' + data.bitrix.errors.length + '</li>';
+                }
+                html += '</ul></div>';
+                
+                html += '</div>';
+                resultDiv.innerHTML = html;
+            } else {
+                resultDiv.innerHTML = `<div class="alert alert-danger">Błąd: ${data.error}</div>`;
+            }
+        })
+        .catch(error => {
+            resultDiv.innerHTML = `<div class="alert alert-danger">Błąd: ${error.message}</div>`;
+        });
     });
 </script>
 </body>
